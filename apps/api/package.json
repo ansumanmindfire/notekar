@@ -20,12 +20,15 @@
     "helmet": "8.2.0",
     "cors": "2.8.6",
     "cookie-parser": "1.4.7",
-    "express-rate-limit": "8.5.2"
+    "express-rate-limit": "8.5.2",
+    "jsonwebtoken": "9.0.3",
+    "bcrypt": "6.0.0"
   },
   "devDependencies": {
     "typescript": "6.0.3",
     "prisma": "6.19.3",
     "dotenv-cli": "11.0.0",
+    "dotenv": "17.4.2",
     "vitest": "4.1.10",
     "@vitest/coverage-v8": "4.1.10",
     "supertest": "7.2.2",
@@ -34,6 +37,8 @@
     "@types/node": "26.1.1",
     "@types/express": "5.0.6",
     "@types/cors": "2.8.19",
-    "@types/cookie-parser": "1.4.10"
+    "@types/cookie-parser": "1.4.10",
+    "@types/jsonwebtoken": "9.0.10",
+    "@types/bcrypt": "6.0.0"
   }
 }

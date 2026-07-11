@@ -6,10 +6,12 @@ import { logger } from './lib/logger';
 import { createHelmetMiddleware } from './middleware/helmet';
 import { createCorsMiddleware } from './middleware/cors';
 import { defaultBodyLimit } from './middleware/bodyLimit';
-import { router } from './routes/index';
+import { createRouter } from './routes/index';
 import { errorHandler } from './middleware/errorHandler';
 
-export function createApp(env: Pick<Env, 'WEB_ORIGIN' | 'NODE_ENV'>) {
+export function createApp(
+  env: Pick<Env, 'WEB_ORIGIN' | 'NODE_ENV' | 'JWT_SECRET' | 'BCRYPT_ROUNDS'>,
+) {
   const app = express();
 
   app.use(createHelmetMiddleware(env.NODE_ENV === 'production'));
@@ -17,7 +19,7 @@ export function createApp(env: Pick<Env, 'WEB_ORIGIN' | 'NODE_ENV'>) {
   app.use(pinoHttp({ logger }));
   app.use(defaultBodyLimit);
   app.use(cookieParser());
-  app.use(router);
+  app.use(createRouter(env));
   app.use(errorHandler);
 
   return app;

@@ -1,0 +1,230 @@
+openapi: 3.0.3
+info:
+  title: NoteApp API — AB-1002 delta (Core Auth)
+  version: 1.0.0
+  description: >
+    Additive delta against the eventual full API spec. Introduces /auth/register,
+    /auth/login, /auth/refresh, /auth/logout. Forgot-password (/auth/forgot-password,
+    /auth/reset-password) is out of scope for this ticket (AB-1003).
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Validation failed (email/password shape, complexity, or length)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Email already registered (case-insensitive)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limited (3/hour/IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /auth/login:
+    post:
+      summary: Log in and start a session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated; refreshToken cookie set
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                description: >
+                  refreshToken=<opaque>; HttpOnly; SameSite=Strict; Secure (non-dev); Path=/auth
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials (wrong password or unknown email — identical response)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limited (5/min/IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /auth/refresh:
+    post:
+      summary: Rotate refresh token and issue a new access token
+      security: []
+      parameters:
+        - name: refreshToken
+          in: cookie
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: New access token issued; refreshToken cookie rotated
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                description: rotated refreshToken cookie, same familyId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+        '401':
+          description: >
+            Missing, expired, or revoked refresh token. If the token was already
+            rotated (reuse detected), the entire token family is revoked as a
+            side effect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limited (20/min/IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /auth/logout:
+    post:
+      summary: Log out the current device only
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: refreshToken
+          in: cookie
+          required: false
+          schema:
+            type: string
+      responses:
+        '204':
+          description: >
+            Current device's refresh token revoked and cookie cleared.
+            Idempotent — repeated calls also return 204. Other devices'
+            sessions are unaffected.
+        '429':
+          description: Rate limited (20/min/IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: Must contain at least one uppercase letter, one lowercase letter, and one number.
+
+    RegisterResponse:
+      type: object
+      required: [id, email, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        createdAt:
+          type: string
+          format: date-time
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    LoginResponse:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken:
+          type: string
+        user:
+          type: object
+          required: [id, email]
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+              format: email
+
+    RefreshResponse:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken:
+          type: string
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - AUTH_INVALID_CREDENTIALS
+            - AUTH_TOKEN_INVALID
+            - AUTH_REFRESH_INVALID
+            - USER_EXISTS
+            - RATE_LIMITED
+        message:
+          type: string
+        fields:
+          type: array
+          items:
+            type: string

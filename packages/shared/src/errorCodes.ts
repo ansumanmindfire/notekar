@@ -1,2 +1,10 @@
-// Populated starting AB-1002 with the centralized error code registry (see SDS §6).
-export {};
+export const ErrorCodes = {
+  VALIDATION_FAILED: 'VALIDATION_FAILED',
+  AUTH_INVALID_CREDENTIALS: 'AUTH_INVALID_CREDENTIALS',
+  AUTH_TOKEN_INVALID: 'AUTH_TOKEN_INVALID',
+  AUTH_REFRESH_INVALID: 'AUTH_REFRESH_INVALID',
+  USER_EXISTS: 'USER_EXISTS',
+  RATE_LIMITED: 'RATE_LIMITED',
+} as const;
+
+export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
