@@ -8,7 +8,7 @@ Preconditions (verify all before proceeding):
 3. pnpm lint --max-warnings 0
 4. pnpm test --coverage ≥80% on new code
 5. python -m code_review_graph build (generates latest insights)
-6. openspec archive $ARGUMENTS done
+6. Verify the ticket folder exists at openspec/archive/$ARGUMENTS
 7. spec.md and FRS.md in sync with code
 8. User is on a branch named like `<type>/$ARGUMENTS-<slug>`
    (Read branch from shell output or ask user). The `<type>`

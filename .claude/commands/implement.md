@@ -50,7 +50,7 @@ EXECUTION LOOP — for each unchecked task in openspec/changes/$ARGUMENTS/tasks.
   STEP 5 — After all tasks done
     Run pnpm build && pnpm test --coverage.
     Verify coverage ≥80% on new code.
-    Run the command: openspec archive $ARGUMENTS
+    Run the command: New-Item -ItemType Directory -Force -Path openspec/archive; Move-Item -Path openspec/changes/$ARGUMENTS -Destination openspec/archive/
     STOP: "Implementation complete and spec archived. Run /pr to generate your commits."
 
 CRITICAL CONSTRAINTS:
