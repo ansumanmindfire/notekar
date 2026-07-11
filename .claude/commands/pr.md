@@ -3,16 +3,14 @@ Ticket ID: $ARGUMENTS
 You are preparing a pull request. You DRAFT git commands; the user EXECUTES them. You never run git yourself.
 
 Preconditions (verify all before proceeding):
-1. openspec/changes/$ARGUMENTS/review-log.md shows no unresolved [FAIL] or [SEC]
-2. openspec/changes/$ARGUMENTS/fix-bundles.md entries all marked APPLIED
-3. openspec validate passes
-4. pnpm build: 0 errors, 0 warnings
-5. pnpm lint --max-warnings 0
-6. pnpm test --coverage ≥80% on new code
-7. python -m code_review_graph build (generates latest insights)
-8. openspec archive $ARGUMENTS done
-9. spec.md and FRS.md in sync with code
-10. User is on a branch named like `<type>/$ARGUMENTS-<slug>`
+1. All watcher [FAIL] or [SEC] findings in the chat history have been addressed.
+2. pnpm build: 0 errors, 0 warnings
+3. pnpm lint --max-warnings 0
+4. pnpm test --coverage ≥80% on new code
+5. python -m code_review_graph build (generates latest insights)
+6. openspec archive $ARGUMENTS done
+7. spec.md and FRS.md in sync with code
+8. User is on a branch named like `<type>/$ARGUMENTS-<slug>`
    (Read branch from shell output or ask user). The `<type>`
    prefix (feat/chore/test/fix/docs/refactor/perf/ci) should match
    the dominant commit type for this ticket.
@@ -63,8 +61,7 @@ PART 3 — PR title and body
      (If no bundles edited spec/FRS, write "None — implementation matched approved spec exactly.")
 
      ## Watcher Summary
-     - {N} fix bundles applied
-     - 0 unresolved [FAIL] or [SEC]
+     - 0 unresolved [FAIL] or [SEC] findings from Watcher agents
      - Coverage: <pct>% on new code
      
      ## Code Graph Highlights

@@ -1,0 +1,39 @@
+{
+  "name": "noteapp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": "22.22.0"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "prepare": "husky",
+    "dev": "pnpm --parallel --filter api --filter web run dev",
+    "build": "pnpm -r run build",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "vitest run",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d && pnpm --filter api run prisma:migrate"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "eslint": "10.6.0",
+    "@eslint/js": "10.0.1",
+    "globals": "17.7.0",
+    "@typescript-eslint/eslint-plugin": "8.63.0",
+    "@typescript-eslint/parser": "8.63.0",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.4",
+    "husky": "9.1.7",
+    "@commitlint/cli": "21.2.1",
+    "@commitlint/config-conventional": "21.1.0",
+    "vitest": "4.1.10",
+    "@vitest/coverage-v8": "4.1.10",
+    "tsx": "4.22.4"
+  }
+}

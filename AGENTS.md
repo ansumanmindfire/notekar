@@ -57,7 +57,7 @@ pnpm install                                   # install all workspace packages
 pnpm db:up                                     # docker compose up -d (Postgres 16)
 pnpm db:down                                   # docker compose down
 pnpm db:reset                                  # down -v && up -d && prisma migrate dev (full wipe + remigrate)
-pnpm --filter api exec prisma migrate dev      # run/create migrations (dev)
+pnpm --filter api run prisma:migrate           # run/create migrations (dev; wraps prisma migrate dev with dotenv-cli to load the root .env)
 pnpm dev                                       # start API + web dev servers
 ```
 

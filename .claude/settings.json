@@ -1,4 +1,24 @@
 {
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "C:\\Users\\Mindfire Intern 11\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+      "args": [
+        "-m",
+        "code_review_graph",
+        "serve"
+      ],
+      "cwd": "D:\\ansuman\\SDD\\NoteApp",
+      "type": "stdio"
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "env": {
+        "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+      },
+      "type": "stdio"
+    }
+  },
   "hooks": {
     "PostToolUse": [
       {
