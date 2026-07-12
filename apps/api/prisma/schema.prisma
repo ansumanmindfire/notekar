@@ -64,6 +64,7 @@ model Note {
 
   @@index([userId, deletedAt])
   @@index([userId, createdAt])
+  @@index([userId, updatedAt])
 }
 
 model NoteVersion {
