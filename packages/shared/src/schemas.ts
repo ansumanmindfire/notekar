@@ -61,6 +61,16 @@ export const paginationQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(50).default(10),
 });
 
+export const noteSortSchema = z
+  .enum(['createdAt:asc', 'createdAt:desc', 'updatedAt:asc', 'updatedAt:desc'])
+  .default('createdAt:desc');
+
+export const listNotesQuerySchema = paginationQuerySchema.extend({
+  sort: noteSortSchema,
+});
+
 export type CreateNoteInput = z.infer<typeof createNoteSchema>;
 export type UpdateNoteInput = z.infer<typeof updateNoteSchema>;
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
+export type NoteSort = z.infer<typeof noteSortSchema>;
+export type ListNotesQuery = z.infer<typeof listNotesQuerySchema>;
