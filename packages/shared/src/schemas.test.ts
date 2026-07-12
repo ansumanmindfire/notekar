@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from './schemas';
+import {
+  registerSchema,
+  loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  createNoteSchema,
+  updateNoteSchema,
+  paginationQuerySchema,
+} from './schemas';
 
 describe('registerSchema', () => {
   it('accepts a valid email and a password meeting all complexity rules', () => {
@@ -283,6 +291,190 @@ describe('resetPasswordSchema', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues.some((issue) => issue.path[0] === 'newPassword')).toBe(true);
+    }
+  });
+});
+
+describe('createNoteSchema', () => {
+  it('accepts a valid title and a TipTap JSON body', () => {
+    const result = createNoteSchema.safeParse({
+      title: 'My Note',
+      body: { type: 'doc', content: [] },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a title of exactly 200 characters', () => {
+    const title = 'a'.repeat(200);
+
+    const result = createNoteSchema.safeParse({
+      title,
+      body: { type: 'doc', content: [] },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a title of 201 characters', () => {
+    const title = 'a'.repeat(201);
+
+    const result = createNoteSchema.safeParse({
+      title,
+      body: { type: 'doc', content: [] },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'title')).toBe(true);
+    }
+  });
+
+  it('rejects an empty title', () => {
+    const result = createNoteSchema.safeParse({
+      title: '',
+      body: { type: 'doc', content: [] },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'title')).toBe(true);
+    }
+  });
+
+  it('rejects a missing body', () => {
+    const result = createNoteSchema.safeParse({
+      title: 'My Note',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'body')).toBe(true);
+    }
+  });
+
+  it('rejects a non-object body', () => {
+    const result = createNoteSchema.safeParse({
+      title: 'My Note',
+      body: 'not an object',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'body')).toBe(true);
+    }
+  });
+
+  it('accepts an empty object body (TipTap document shape is not deeply validated)', () => {
+    const result = createNoteSchema.safeParse({
+      title: 'My Note',
+      body: {},
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('updateNoteSchema', () => {
+  it('accepts title only', () => {
+    const result = updateNoteSchema.safeParse({
+      title: 'Updated Title',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts body only', () => {
+    const result = updateNoteSchema.safeParse({
+      body: { type: 'doc', content: [] },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts both title and body', () => {
+    const result = updateNoteSchema.safeParse({
+      title: 'Updated Title',
+      body: { type: 'doc', content: [] },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an empty object where neither title nor body is present', () => {
+    const result = updateNoteSchema.safeParse({});
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a title exceeding 200 characters even when it is the only field present', () => {
+    const title = 'a'.repeat(201);
+
+    const result = updateNoteSchema.safeParse({
+      title,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'title')).toBe(true);
+    }
+  });
+});
+
+describe('paginationQuerySchema', () => {
+  it('defaults to page 1 and pageSize 10 when no input is provided', () => {
+    const result = paginationQuerySchema.safeParse({});
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.page).toBe(1);
+      expect(result.data.pageSize).toBe(10);
+    }
+  });
+
+  it('coerces string-based numeric query input into numbers', () => {
+    const result = paginationQuerySchema.safeParse({ page: '2', pageSize: '25' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.page).toBe(2);
+      expect(result.data.pageSize).toBe(25);
+    }
+  });
+
+  it('rejects a pageSize of 51 (over the cap of 50)', () => {
+    const result = paginationQuerySchema.safeParse({ pageSize: 51 });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'pageSize')).toBe(true);
+    }
+  });
+
+  it('accepts a pageSize of exactly 50 (at the cap)', () => {
+    const result = paginationQuerySchema.safeParse({ pageSize: 50 });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.pageSize).toBe(50);
+    }
+  });
+
+  it('rejects a page of 0', () => {
+    const result = paginationQuerySchema.safeParse({ page: 0 });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'page')).toBe(true);
+    }
+  });
+
+  it('rejects a negative page', () => {
+    const result = paginationQuerySchema.safeParse({ page: -1 });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'page')).toBe(true);
     }
   });
 });
