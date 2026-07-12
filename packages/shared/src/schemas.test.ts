@@ -15,6 +15,7 @@ import {
   createTagSchema,
   updateTagSchema,
   tagIdsQuerySchema,
+  searchQuerySchema,
 } from './schemas';
 
 describe('registerSchema', () => {
@@ -859,6 +860,84 @@ describe('tagIdsQuerySchema', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data).toEqual([' ']);
+    }
+  });
+});
+
+describe('searchQuerySchema', () => {
+  it('parses a valid q alone, defaulting page to 1 and pageSize to 10', () => {
+    const result = searchQuerySchema.safeParse({ q: 'hello' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.q).toBe('hello');
+      expect(result.data.page).toBe(1);
+      expect(result.data.pageSize).toBe(10);
+    }
+  });
+
+  it('rejects a missing q', () => {
+    const result = searchQuerySchema.safeParse({});
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'q')).toBe(true);
+    }
+  });
+
+  it('rejects an empty string q', () => {
+    const result = searchQuerySchema.safeParse({ q: '' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'q')).toBe(true);
+    }
+  });
+
+  it('rejects a whitespace-only q (trimmed to empty, still fails min(1))', () => {
+    const result = searchQuerySchema.safeParse({ q: '   ' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'q')).toBe(true);
+    }
+  });
+
+  it('reflects q combined with explicit page/pageSize in the parsed result', () => {
+    const result = searchQuerySchema.safeParse({ q: 'hello', page: 2, pageSize: 25 });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.q).toBe('hello');
+      expect(result.data.page).toBe(2);
+      expect(result.data.pageSize).toBe(25);
+    }
+  });
+
+  it('trims leading/trailing whitespace around real content in q', () => {
+    const result = searchQuerySchema.safeParse({ q: '  hello  ' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.q).toBe('hello');
+    }
+  });
+
+  it('rejects an invalid pageSize (0) combined with a valid q', () => {
+    const result = searchQuerySchema.safeParse({ q: 'hello', pageSize: 0 });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'pageSize')).toBe(true);
+    }
+  });
+
+  it('rejects an invalid pageSize (51, over the cap) combined with a valid q', () => {
+    const result = searchQuerySchema.safeParse({ q: 'hello', pageSize: 51 });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'pageSize')).toBe(true);
     }
   });
 });

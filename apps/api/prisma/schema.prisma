@@ -68,6 +68,12 @@ model Note {
   @@index([userId, createdAt])
   @@index([userId, updatedAt])
 }
+// Full-text search column added via a raw SQL migration (see
+// prisma/migrations/*_note_search_vector), not declared as a Prisma field
+// since Prisma cannot model a STORED generated column:
+//   ALTER TABLE "Note" ADD COLUMN "searchVector" tsvector
+//     GENERATED ALWAYS AS (to_tsvector('english', coalesce(title,'') || ' ' || coalesce("bodyText",''))) STORED;
+//   CREATE INDEX "note_search_idx" ON "Note" USING GIN ("searchVector");
 
 model NoteVersion {
   id      String   @id @default(cuid())
