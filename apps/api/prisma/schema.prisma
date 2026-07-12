@@ -17,6 +17,7 @@ model User {
   refreshTokens RefreshToken[]
   otps          PasswordResetOtp[]
   notes         Note[]
+  tags          Tag[]
 }
 
 model RefreshToken {
@@ -61,6 +62,7 @@ model Note {
 
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   versions NoteVersion[]
+  tags     NoteTag[]
 
   @@index([userId, deletedAt])
   @@index([userId, createdAt])
@@ -79,4 +81,30 @@ model NoteVersion {
 
   @@index([noteId, version])
   @@index([savedAt])
+}
+
+model Tag {
+  id     String @id @default(cuid())
+  userId String
+  name   String
+  color  String // validated against the fixed TagColor enum in packages/shared at the app layer
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes NoteTag[]
+
+  @@index([userId])
+}
+// Case-insensitive per-user uniqueness added via a raw SQL migration (see
+// prisma/migrations/*_tag_name_ci_unique_index):
+//   CREATE UNIQUE INDEX tag_user_name_ci_idx ON "Tag" ("userId", lower(name));
+
+model NoteTag {
+  noteId String
+  tagId  String
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+  @@index([tagId])
 }

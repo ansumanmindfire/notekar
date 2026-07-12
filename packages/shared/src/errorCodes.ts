@@ -7,6 +7,9 @@ export const ErrorCodes = {
   AUTH_OTP_INVALID: 'AUTH_OTP_INVALID',
   RATE_LIMITED: 'RATE_LIMITED',
   NOTE_NOT_FOUND: 'NOTE_NOT_FOUND',
+  TAG_NOT_FOUND: 'TAG_NOT_FOUND',
+  TAG_NAME_DUPLICATE: 'TAG_NAME_DUPLICATE',
+  INVALID_TAG: 'INVALID_TAG',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

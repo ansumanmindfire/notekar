@@ -1,0 +1,478 @@
+openapi: 3.0.3
+info:
+  title: NoteApp API — AB-1006 delta (Tags Architecture)
+  version: 1.0.0
+  description: >
+    Additive delta against the AB-1004/AB-1005 /notes contract, plus the new
+    /tags resource. Adds Tag CRUD, a paginated tag list with active-note
+    counts, tagIds on note create/update, tagIds on every Note response, and
+    a tagIds AND-filter on GET /notes (closing the FR-NOTE-6 deferral).
+
+paths:
+  /tags:
+    post:
+      summary: Create a tag
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagRequest'
+      responses:
+        '201':
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '400':
+          description: Validation failed (name empty/>50 chars, invalid color)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Duplicate tag name (case-insensitive, same user)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    get:
+      summary: List the caller's tags with active-note counts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Paginated list of the caller's tags
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagWithCountPage'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /tags/{id}:
+    patch:
+      summary: Update a tag's name and/or color
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTagRequest'
+      responses:
+        '200':
+          description: Tag updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Tag missing or not owned by caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Duplicate tag name (case-insensitive, same user)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      summary: Delete a tag
+      description: >
+        Physically deletes the Tag row, cascading to NoteTag join rows only.
+        Notes that used this tag remain fully intact.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Tag deleted
+        '404':
+          description: Tag missing or not owned by caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /notes:
+    post:
+      summary: Create a note
+      description: >
+        Extends AB-1004's contract with an optional tagIds array. Every
+        listed tag must belong to the caller.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNoteRequest'
+      responses:
+        '201':
+          description: Note created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: A listed tagId does not belong to the caller or does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    get:
+      summary: List active (non-deleted) notes
+      description: >
+        Extends AB-1005's sort-only contract with an optional tagIds filter
+        (comma-separated, AND semantics per FR-NOTE-6).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum:
+              - createdAt:asc
+              - createdAt:desc
+              - updatedAt:asc
+              - updatedAt:desc
+            default: createdAt:desc
+        - name: tagIds
+          in: query
+          description: >
+            Comma-separated tag IDs. Notes must carry every listed tag (AND
+            semantics). Unowned or nonexistent tag IDs simply match nothing.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated list of the caller's active notes, tag-filtered and sorted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotePage'
+        '400':
+          description: Validation failed (invalid page, pageSize, or sort value)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /notes/{id}:
+    patch:
+      summary: Update a note
+      description: >
+        Extends AB-1004's contract with an optional tagIds array. When
+        present, it fully replaces the note's current tag association.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNoteRequest'
+      responses:
+        '200':
+          description: Note updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Note missing, not owned, or soft-deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: A listed tagId does not belong to the caller or does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    TagColor:
+      type: string
+      enum:
+        - red
+        - orange
+        - yellow
+        - green
+        - blue
+        - purple
+        - pink
+        - gray
+
+    CreateTagRequest:
+      type: object
+      required: [name, color]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        color:
+          $ref: '#/components/schemas/TagColor'
+
+    UpdateTagRequest:
+      type: object
+      description: At least one of name or color must be present.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        color:
+          $ref: '#/components/schemas/TagColor'
+
+    Tag:
+      type: object
+      required: [id, name, color]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        color:
+          $ref: '#/components/schemas/TagColor'
+
+    TagWithCount:
+      allOf:
+        - $ref: '#/components/schemas/Tag'
+        - type: object
+          required: [noteCount]
+          properties:
+            noteCount:
+              type: integer
+              description: Count of this tag's currently-active (non-deleted) notes.
+
+    TagWithCountPage:
+      type: object
+      required: [items, page, pageSize, totalItems, totalPages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagWithCount'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalItems:
+          type: integer
+        totalPages:
+          type: integer
+
+    CreateNoteRequest:
+      type: object
+      required: [title, body]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body:
+          type: object
+        tagIds:
+          type: array
+          items:
+            type: string
+
+    UpdateNoteRequest:
+      type: object
+      description: At least one of title, body, or tagIds must be present.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body:
+          type: object
+        tagIds:
+          type: array
+          items:
+            type: string
+
+    Note:
+      type: object
+      required: [id, title, body, tagIds, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: object
+        tagIds:
+          type: array
+          items:
+            type: string
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    NotePage:
+      type: object
+      required: [items, page, pageSize, totalItems, totalPages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Note'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalItems:
+          type: integer
+        totalPages:
+          type: integer
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - AUTH_TOKEN_INVALID
+            - NOTE_NOT_FOUND
+            - TAG_NOT_FOUND
+            - TAG_NAME_DUPLICATE
+            - INVALID_TAG
+        message:
+          type: string
+        fields:
+          type: array
+          items:
+            type: string

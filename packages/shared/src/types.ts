@@ -1,3 +1,5 @@
+import type { TagColor } from './schemas';
+
 export interface Page<T> {
   items: T[];
   page: number;
@@ -42,8 +44,19 @@ export interface Note {
   id: string;
   title: string;
   body: TipTapDocument;
+  tagIds: string[];
   version: number;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: TagColor;
+}
+
+export interface TagWithCount extends Tag {
+  noteCount: number;
 }
