@@ -16,6 +16,7 @@ model User {
 
   refreshTokens RefreshToken[]
   otps          PasswordResetOtp[]
+  notes         Note[]
 }
 
 model RefreshToken {
@@ -45,4 +46,36 @@ model PasswordResetOtp {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model Note {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  body      Json
+  bodyText  String    @default("")
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions NoteVersion[]
+
+  @@index([userId, deletedAt])
+  @@index([userId, createdAt])
+}
+
+model NoteVersion {
+  id      String   @id @default(cuid())
+  noteId  String
+  version Int
+  title   String
+  body    Json
+  savedAt DateTime @default(now())
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId, version])
+  @@index([savedAt])
 }
