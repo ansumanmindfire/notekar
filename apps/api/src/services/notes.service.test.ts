@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
 import { ErrorCodes } from 'shared/errorCodes';
-import type { CreateNoteInput, UpdateNoteInput, PaginationQuery } from 'shared/schemas';
+import type { CreateNoteInput, UpdateNoteInput, PaginationQuery, ListNotesQuery } from 'shared/schemas';
 import { AppError } from '../lib/AppError';
 import { extractPlainText } from '../lib/tiptap';
 import {
@@ -290,13 +290,13 @@ describe('notes.service', () => {
   });
 
   describe('listNotes', () => {
-    it('scopes by deletedAt: null, orders by createdAt desc, and computes skip/take + totalPages correctly', async () => {
+    it('scopes by deletedAt: null, orders by createdAt desc (default sort), and computes skip/take + totalPages correctly', async () => {
       const items = [baseNote({ id: 'note-a' }), baseNote({ id: 'note-b' })];
       prisma.note.findMany.mockResolvedValue(items);
       prisma.note.count.mockResolvedValue(25);
 
-      const pagination: PaginationQuery = { page: 2, pageSize: 10 };
-      const result = await listNotes(prisma, USER_ID, pagination);
+      const query: ListNotesQuery = { page: 2, pageSize: 10, sort: 'createdAt:desc' };
+      const result = await listNotes(prisma, USER_ID, query);
 
       expect(prisma.note.findMany).toHaveBeenCalledWith({
         where: { userId: USER_ID, deletedAt: null },
@@ -306,6 +306,54 @@ describe('notes.service', () => {
       });
       expect(prisma.note.count).toHaveBeenCalledWith({ where: { userId: USER_ID, deletedAt: null } });
       expect(result).toEqual({ items, page: 2, pageSize: 10, totalItems: 25, totalPages: 3 });
+    });
+
+    it('orders by createdAt asc when sort is createdAt:asc', async () => {
+      const items = [baseNote({ id: 'note-a' })];
+      prisma.note.findMany.mockResolvedValue(items);
+      prisma.note.count.mockResolvedValue(1);
+
+      const query: ListNotesQuery = { page: 1, pageSize: 10, sort: 'createdAt:asc' };
+      await listNotes(prisma, USER_ID, query);
+
+      expect(prisma.note.findMany).toHaveBeenCalledWith({
+        where: { userId: USER_ID, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+        skip: 0,
+        take: 10,
+      });
+    });
+
+    it('orders by updatedAt asc when sort is updatedAt:asc', async () => {
+      const items = [baseNote({ id: 'note-a' })];
+      prisma.note.findMany.mockResolvedValue(items);
+      prisma.note.count.mockResolvedValue(1);
+
+      const query: ListNotesQuery = { page: 1, pageSize: 10, sort: 'updatedAt:asc' };
+      await listNotes(prisma, USER_ID, query);
+
+      expect(prisma.note.findMany).toHaveBeenCalledWith({
+        where: { userId: USER_ID, deletedAt: null },
+        orderBy: { updatedAt: 'asc' },
+        skip: 0,
+        take: 10,
+      });
+    });
+
+    it('orders by updatedAt desc when sort is updatedAt:desc', async () => {
+      const items = [baseNote({ id: 'note-a' })];
+      prisma.note.findMany.mockResolvedValue(items);
+      prisma.note.count.mockResolvedValue(1);
+
+      const query: ListNotesQuery = { page: 1, pageSize: 10, sort: 'updatedAt:desc' };
+      await listNotes(prisma, USER_ID, query);
+
+      expect(prisma.note.findMany).toHaveBeenCalledWith({
+        where: { userId: USER_ID, deletedAt: null },
+        orderBy: { updatedAt: 'desc' },
+        skip: 0,
+        take: 10,
+      });
     });
   });
 
