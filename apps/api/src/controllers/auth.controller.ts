@@ -1,12 +1,27 @@
 import type { NextFunction, Request, Response } from 'express';
-import { registerSchema, loginSchema } from 'shared/schemas';
+import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from 'shared/schemas';
 import { ErrorCodes } from 'shared/errorCodes';
-import type { RegisterResponse, LoginResponse, RefreshResponse } from 'shared/types';
+import type {
+  RegisterResponse,
+  LoginResponse,
+  RefreshResponse,
+  ForgotPasswordResponse,
+} from 'shared/types';
 import type { Env } from '../lib/env';
 import { prisma } from '../lib/prisma';
 import { setRefreshCookie, clearRefreshCookie } from '../lib/cookie';
 import { AppError } from '../lib/AppError';
-import { registerUser, loginUser, refreshSession, logoutUser } from '../services/auth.service';
+import {
+  registerUser,
+  loginUser,
+  refreshSession,
+  logoutUser,
+  forgotPassword,
+  resetPassword,
+} from '../services/auth.service';
+
+const FORGOT_PASSWORD_GENERIC_MESSAGE =
+  'If an account with that email exists, a password reset code has been sent.';
 
 export type AuthControllerEnv = Pick<Env, 'JWT_SECRET' | 'BCRYPT_ROUNDS' | 'NODE_ENV'>;
 
@@ -70,6 +85,27 @@ export function createAuthController(env: AuthControllerEnv) {
         const rawToken = getRefreshCookie(req);
         await logoutUser(prisma, rawToken);
         clearRefreshCookie(res, isProd);
+        res.status(204).send();
+      } catch (err) {
+        next(err);
+      }
+    },
+
+    async forgotPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+      try {
+        const input = forgotPasswordSchema.parse(req.body);
+        await forgotPassword(prisma, input, env.BCRYPT_ROUNDS);
+        const body: ForgotPasswordResponse = { message: FORGOT_PASSWORD_GENERIC_MESSAGE };
+        res.status(200).json(body);
+      } catch (err) {
+        next(err);
+      }
+    },
+
+    async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+      try {
+        const input = resetPasswordSchema.parse(req.body);
+        await resetPassword(prisma, input, env.BCRYPT_ROUNDS);
         res.status(204).send();
       } catch (err) {
         next(err);
