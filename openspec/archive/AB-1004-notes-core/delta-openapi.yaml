@@ -1,0 +1,330 @@
+openapi: 3.0.3
+info:
+  title: NoteApp API — AB-1004 delta (Core Note Models)
+  version: 1.0.0
+  description: >
+    Additive delta against the eventual full API spec. Introduces the /notes
+    resource: create/read/update/soft-delete, basic pagination, Trash, and
+    restore. Depends on the User model and bearer-auth middleware introduced
+    in AB-1002. Tag association (tagIds), sort/tagIds query params on
+    GET /notes, and version read/restore endpoints are explicitly deferred to
+    AB-1006, AB-1005, and AB-1009 respectively — not part of this delta.
+
+paths:
+  /notes:
+    post:
+      summary: Create a note
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNoteRequest'
+      responses:
+        '201':
+          description: Note created with version 1. No NoteVersion snapshot exists yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          description: Validation failed (title empty or >200 chars, malformed body)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    get:
+      summary: List active (non-deleted) notes
+      description: >
+        Basic pagination only in this ticket — fixed default sort
+        (createdAt desc). No sort or tagIds query params; those are added
+        to this same endpoint by AB-1005 without changing this contract.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+      responses:
+        '200':
+          description: Paginated list of the caller's active notes, newest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotePage'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /notes/trash:
+    get:
+      summary: List soft-deleted notes (Trash)
+      description: >
+        Same Page<Note> envelope and pagination mechanism as GET /notes,
+        filtered to deletedAt IS NOT NULL, ordered by deletedAt desc.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+      responses:
+        '200':
+          description: Paginated list of the caller's soft-deleted notes, newest-deleted first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotePage'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /notes/{id}:
+    get:
+      summary: Get a single note
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+      responses:
+        '200':
+          description: Note found and owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Note missing, not owned by the caller, or soft-deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    patch:
+      summary: Update a note's title and/or body
+      description: >
+        Snapshots the pre-update {title, body} into NoteVersion and
+        increments Note.version, inside a single transaction with the
+        update itself. Cannot be used on a soft-deleted note.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNoteRequest'
+      responses:
+        '200':
+          description: Note updated; version incremented; one new NoteVersion row inserted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          description: Validation failed (no fields provided, title >200 chars, malformed body)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Note missing, not owned by the caller, or soft-deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      summary: Soft-delete a note
+      description: Sets deletedAt. Never a physical delete (AGENTS.md §11).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+      responses:
+        '204':
+          description: Note soft-deleted; moved into Trash
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Note missing, not owned by the caller, or already soft-deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /notes/{id}/restore:
+    post:
+      summary: Restore a soft-deleted note
+      description: >
+        Clears deletedAt within the 30-day recovery window. Once
+        purgeNotes.ts has physically deleted the row, this 404s like any
+        other missing note.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+      responses:
+        '200':
+          description: Note restored; reappears in GET /notes, disappears from GET /notes/trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Note missing, not owned by the caller, not soft-deleted, or already purged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    NoteId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    CreateNoteRequest:
+      type: object
+      required: [title, body]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body:
+          type: object
+          description: TipTap JSON document
+
+    UpdateNoteRequest:
+      type: object
+      description: At least one of title or body must be provided.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body:
+          type: object
+          description: TipTap JSON document
+
+    Note:
+      type: object
+      required: [id, title, body, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: object
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    NotePage:
+      type: object
+      required: [items, page, pageSize, totalItems, totalPages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Note'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalItems:
+          type: integer
+        totalPages:
+          type: integer
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - AUTH_TOKEN_INVALID
+            - NOTE_NOT_FOUND
+        message:
+          type: string
+        fields:
+          type: array
+          items:
+            type: string
