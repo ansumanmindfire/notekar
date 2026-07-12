@@ -1,0 +1,140 @@
+openapi: 3.0.3
+info:
+  title: NoteApp API — AB-1007 delta (Search Architecture)
+  version: 1.0.0
+  description: >
+    Additive delta: new GET /search endpoint. Full-text search across the
+    caller's active notes (title + body), relevance-ranked, with a
+    highlighted excerpt per result. No changes to any existing endpoint.
+
+paths:
+  /search:
+    get:
+      summary: Search the caller's active notes by keyword
+      description: >
+        Matches q against a generated tsvector column (title + bodyText) via
+        plainto_tsquery, scoped to the caller's own active (non-deleted)
+        notes. Results are ordered by relevance (ts_rank descending).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search keywords. Trimmed; must be at least 1 non-whitespace character.
+          schema:
+            type: string
+            minLength: 1
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Paginated, relevance-ranked search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResultPage'
+        '400':
+          description: Validation failed (missing/empty/whitespace-only q, or invalid page/pageSize)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Note:
+      type: object
+      required: [id, title, body, tagIds, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: object
+        tagIds:
+          type: array
+          items:
+            type: string
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    SearchResultItem:
+      type: object
+      required: [note, headline]
+      properties:
+        note:
+          $ref: '#/components/schemas/Note'
+        headline:
+          type: string
+          description: >
+            ts_headline-generated excerpt from the note's body with matched
+            terms wrapped in <mark> tags. Raw HTML — must be sanitized with
+            DOMPurify before rendering (AGENTS.md §11).
+
+    SearchResultPage:
+      type: object
+      required: [items, page, pageSize, totalItems, totalPages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResultItem'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalItems:
+          type: integer
+        totalPages:
+          type: integer
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - AUTH_TOKEN_INVALID
+        message:
+          type: string
+        fields:
+          type: array
+          items:
+            type: string
