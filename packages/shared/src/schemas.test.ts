@@ -9,6 +9,12 @@ import {
   paginationQuerySchema,
   noteSortSchema,
   listNotesQuerySchema,
+  TAG_COLORS,
+  tagColorSchema,
+  tagNameSchema,
+  createTagSchema,
+  updateTagSchema,
+  tagIdsQuerySchema,
 } from './schemas';
 
 describe('registerSchema', () => {
@@ -375,6 +381,44 @@ describe('createNoteSchema', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('accepts a note omitting tagIds entirely (tagIds is optional)', () => {
+    const result = createNoteSchema.safeParse({
+      title: 'My Note',
+      body: { type: 'doc', content: [] },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tagIds).toBeUndefined();
+    }
+  });
+
+  it('accepts a note with an array of tagIds', () => {
+    const result = createNoteSchema.safeParse({
+      title: 'My Note',
+      body: { type: 'doc', content: [] },
+      tagIds: ['tag-1', 'tag-2'],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tagIds).toEqual(['tag-1', 'tag-2']);
+    }
+  });
+
+  it('passes duplicate tagIds through unchanged (deduping is a service-layer concern, not schema)', () => {
+    const result = createNoteSchema.safeParse({
+      title: 'My Note',
+      body: { type: 'doc', content: [] },
+      tagIds: ['tag-1', 'tag-1', 'tag-2'],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tagIds).toEqual(['tag-1', 'tag-1', 'tag-2']);
+    }
+  });
 });
 
 describe('updateNoteSchema', () => {
@@ -419,6 +463,28 @@ describe('updateNoteSchema', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues.some((issue) => issue.path[0] === 'title')).toBe(true);
+    }
+  });
+
+  it('accepts tagIds alone, satisfying the "at least one field" refinement', () => {
+    const result = updateNoteSchema.safeParse({
+      tagIds: ['tag-1'],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tagIds).toEqual(['tag-1']);
+    }
+  });
+
+  it('passes duplicate tagIds through unchanged (deduping is a service-layer concern, not schema)', () => {
+    const result = updateNoteSchema.safeParse({
+      tagIds: ['tag-1', 'tag-1'],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tagIds).toEqual(['tag-1', 'tag-1']);
     }
   });
 });
@@ -601,6 +667,198 @@ describe('listNotesQuerySchema', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues.some((issue) => issue.path[0] === 'page')).toBe(true);
+    }
+  });
+
+  it('parses a comma-separated tagIds query string into an array', () => {
+    const result = listNotesQuerySchema.safeParse({ tagIds: 't1,t2,t3' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tagIds).toEqual(['t1', 't2', 't3']);
+    }
+  });
+
+  it('parses an empty tagIds string into undefined (no filter applied)', () => {
+    const result = listNotesQuerySchema.safeParse({ tagIds: '' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tagIds).toBeUndefined();
+    }
+  });
+
+  it('parses an omitted tagIds value into undefined (no filter applied)', () => {
+    const result = listNotesQuerySchema.safeParse({});
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.tagIds).toBeUndefined();
+    }
+  });
+});
+
+describe('tagColorSchema', () => {
+  it.each(TAG_COLORS)('accepts the valid tag color %s', (color) => {
+    const result = tagColorSchema.safeParse(color);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toBe(color);
+    }
+  });
+
+  it('rejects a string that is not one of the 8 defined tag colors', () => {
+    const result = tagColorSchema.safeParse('turquoise');
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('tagNameSchema / createTagSchema', () => {
+  it('rejects an empty (0-character) tag name', () => {
+    const result = createTagSchema.safeParse({ name: '', color: 'red' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'name')).toBe(true);
+    }
+  });
+
+  it('accepts a 1-character tag name', () => {
+    const result = createTagSchema.safeParse({ name: 'a', color: 'red' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a tag name of exactly 50 characters', () => {
+    const name = 'a'.repeat(50);
+
+    const result = createTagSchema.safeParse({ name, color: 'red' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a tag name of 51 characters', () => {
+    const name = 'a'.repeat(51);
+
+    const result = createTagSchema.safeParse({ name, color: 'red' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'name')).toBe(true);
+    }
+  });
+
+  it('rejects a missing color', () => {
+    const result = createTagSchema.safeParse({ name: 'Work' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'color')).toBe(true);
+    }
+  });
+
+  it('rejects an invalid color value', () => {
+    const result = createTagSchema.safeParse({ name: 'Work', color: 'not-a-color' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'color')).toBe(true);
+    }
+  });
+
+  it('exposes tagNameSchema directly with the same boundary rules', () => {
+    expect(tagNameSchema.safeParse('a'.repeat(50)).success).toBe(true);
+    expect(tagNameSchema.safeParse('a'.repeat(51)).success).toBe(false);
+    expect(tagNameSchema.safeParse('').success).toBe(false);
+  });
+});
+
+describe('updateTagSchema', () => {
+  it('accepts name only', () => {
+    const result = updateTagSchema.safeParse({ name: 'Renamed' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts color only', () => {
+    const result = updateTagSchema.safeParse({ color: 'blue' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts both name and color', () => {
+    const result = updateTagSchema.safeParse({ name: 'Renamed', color: 'blue' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an empty object where neither name nor color is present', () => {
+    const result = updateTagSchema.safeParse({});
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('tagIdsQuerySchema', () => {
+  it('parses a comma-separated string into an array of IDs', () => {
+    const result = tagIdsQuerySchema.safeParse('t1,t2,t3');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual(['t1', 't2', 't3']);
+    }
+  });
+
+  it('parses an empty string into undefined', () => {
+    const result = tagIdsQuerySchema.safeParse('');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toBeUndefined();
+    }
+  });
+
+  it('drops the trailing empty segment produced by a trailing comma', () => {
+    const result = tagIdsQuerySchema.safeParse('t1,t2,');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual(['t1', 't2']);
+    }
+  });
+
+  it('parses an absent (undefined) value into undefined', () => {
+    const result = tagIdsQuerySchema.safeParse(undefined);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toBeUndefined();
+    }
+  });
+
+  it('parses a string made up only of separators (no actual IDs) into undefined', () => {
+    // Every comma-delimited segment is empty, so after filtering there are no
+    // IDs left and the schema falls back to undefined (no filter applied).
+    const result = tagIdsQuerySchema.safeParse(',,,');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toBeUndefined();
+    }
+  });
+
+  // NOTE: a whitespace-only string like ' ' is NOT collapsed to undefined by
+  // the current implementation - it only checks val.length === 0 and does not
+  // trim, so ' ' survives the split/filter as a single non-empty segment.
+  // This is documented here as the schema's actual current behavior.
+  it('does not treat a whitespace-only string as empty (current implementation does not trim)', () => {
+    const result = tagIdsQuerySchema.safeParse(' ');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual([' ']);
     }
   });
 });

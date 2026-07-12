@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import { ErrorCodes } from 'shared/errorCodes';
-import type { Note as NoteResponse, Page } from 'shared/types';
+import type { Note as NoteResponse, Tag as TagResponse, Page } from 'shared/types';
 import type { Prisma } from '@prisma/client';
 import { createApp } from '../app';
 import { prisma } from '../lib/prisma';
@@ -20,6 +20,12 @@ import { purgeNotes } from '../lib/jobs/purgeNotes';
 // AB-1005 (Notes List & Filtering) extends this suite with Scenarios 1-8 of
 // openspec/changes/AB-1005-notes-listing/spec.md, covering the new `sort`
 // query param on GET /notes and confirming GET /notes/trash is untouched.
+//
+// AB-1006 (Tags Architecture) extends this suite with Scenarios 12-20 of
+// openspec/changes/AB-1006-tags-crud/spec.md, covering `tagIds` on
+// POST/PATCH /notes, the `tagIds` AND-filter on GET /notes (replacing the
+// AB-1005-era placeholder test that documented the deferral), and confirming
+// `tagIds` survives GET /notes/:id, GET /notes/trash, and restore.
 
 const TEST_ENV = {
   WEB_ORIGIN: 'http://localhost:5173',
@@ -40,8 +46,10 @@ function buildApp(): Express {
 }
 
 async function resetDb(): Promise<void> {
-  // NoteVersion first for explicitness, even though Note.onDelete: Cascade
-  // from User would otherwise sweep both up transitively via user.deleteMany().
+  // NoteTag/Tag first for explicitness, even though the Cascade FKs from
+  // Note/User would otherwise sweep them up transitively via the deletes below.
+  await prisma.noteTag.deleteMany();
+  await prisma.tag.deleteMany();
   await prisma.noteVersion.deleteMany();
   await prisma.note.deleteMany();
   await prisma.user.deleteMany();
@@ -96,6 +104,14 @@ function daysAgo(days: number): Date {
   return new Date(Date.now() - days * DAY_MS);
 }
 
+// Creates a Tag row directly via Prisma (bypassing the /tags HTTP surface,
+// which is exercised in full by tags.integration.test.ts) so these /notes
+// tests can focus purely on the tagIds association contract.
+async function seedTag(userId: string, name: string, color = 'blue'): Promise<{ id: string }> {
+  const tag = await prisma.tag.create({ data: { userId, name, color } });
+  return { id: tag.id };
+}
+
 beforeEach(async () => {
   await resetDb();
 });
@@ -123,6 +139,7 @@ describe('POST /notes', () => {
     expect(body.version).toBe(1);
     expect(body.deletedAt).toBeNull();
     expect(typeof body.id).toBe('string');
+    expect(body.tagIds).toEqual([]);
 
     const versions = await prisma.noteVersion.findMany({ where: { noteId: body.id } });
     expect(versions).toHaveLength(0);
@@ -152,6 +169,62 @@ describe('POST /notes', () => {
     expect(res.body).toMatchObject({ code: ErrorCodes.VALIDATION_FAILED });
 
     const count = await prisma.note.count();
+    expect(count).toBe(0);
+  });
+
+  // AB-1006 (Tags Architecture) -- tagIds on note create.
+  // openspec/changes/AB-1006-tags-crud/spec.md Scenarios 12-13.
+
+  it('AB-1006 #12 creates a note with tagIds referencing only tags the caller owns -> 201, response tagIds matches what was sent', async () => {
+    const user = await seedUser('tagcreate12@example.com');
+    const tagRes = await request(app)
+      .post('/tags')
+      .set('Authorization', authHeader(user.id))
+      .send({ name: 'Work', color: 'blue' });
+    expect(tagRes.status).toBe(201);
+    const tag = tagRes.body as TagResponse;
+
+    const res = await request(app)
+      .post('/notes')
+      .set('Authorization', authHeader(user.id))
+      .send({ title: 'Tagged note', body: DEFAULT_BODY, tagIds: [tag.id] });
+
+    expect(res.status).toBe(201);
+    const body = res.body as NoteResponse;
+    expect(body.tagIds).toEqual([tag.id]);
+  });
+
+  it("AB-1006 #13 creates a note with a tagIds entry belonging to another user -> 422 INVALID_TAG, note is not created", async () => {
+    const owner = await seedUser('tagcreate13owner@example.com');
+    const intruder = await seedUser('tagcreate13intruder@example.com');
+    const ownerTag = await seedTag(owner.id, 'Owner Tag');
+
+    const res = await request(app)
+      .post('/notes')
+      .set('Authorization', authHeader(intruder.id))
+      .send({ title: 'Should not be created', body: DEFAULT_BODY, tagIds: [ownerTag.id] });
+
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({ code: ErrorCodes.INVALID_TAG });
+
+    const list = await request(app).get('/notes').set('Authorization', authHeader(intruder.id));
+    const listBody = list.body as Page<NoteResponse>;
+    expect(listBody.items).toHaveLength(0);
+    expect(listBody.totalItems).toBe(0);
+  });
+
+  it('AB-1006 #13b creates a note with a nonexistent tagIds entry -> 422 INVALID_TAG, note is not created', async () => {
+    const user = await seedUser('tagcreate13b@example.com');
+
+    const res = await request(app)
+      .post('/notes')
+      .set('Authorization', authHeader(user.id))
+      .send({ title: 'Should not be created', body: DEFAULT_BODY, tagIds: ['nonexistent-tag-id'] });
+
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({ code: ErrorCodes.INVALID_TAG });
+
+    const count = await prisma.note.count({ where: { userId: user.id } });
     expect(count).toBe(0);
   });
 });
@@ -194,6 +267,19 @@ describe('GET /notes/:id', () => {
     expect(res.status).toBe(404);
     expect(res.body).toMatchObject({ code: ErrorCodes.NOTE_NOT_FOUND });
   });
+
+  it('AB-1006 #20a GET /notes/:id includes tagIds in its response', async () => {
+    const user = await seedUser('tagget20a@example.com');
+    const tag = await seedTag(user.id, 'Personal');
+    const note = await seedNote({ userId: user.id, title: 'Tagged read' });
+    await prisma.noteTag.create({ data: { noteId: note.id, tagId: tag.id } });
+
+    const res = await request(app).get(`/notes/${note.id}`).set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as NoteResponse;
+    expect(body.tagIds).toEqual([tag.id]);
+  });
 });
 
 describe('PATCH /notes/:id', () => {
@@ -233,6 +319,80 @@ describe('PATCH /notes/:id', () => {
 
     expect(res.status).toBe(404);
     expect(res.body).toMatchObject({ code: ErrorCodes.NOTE_NOT_FOUND });
+
+    const versions = await prisma.noteVersion.findMany({ where: { noteId: note.id } });
+    expect(versions).toHaveLength(0);
+  });
+
+  // AB-1006 (Tags Architecture) -- tagIds full-set replacement on note update.
+  // openspec/changes/AB-1006-tags-crud/spec.md Scenarios 14-16.
+
+  it('AB-1006 #14 PATCH with a new tagIds array -> 200, tags fully replaced (old tag detached, new tag attached)', async () => {
+    const user = await seedUser('tagupdate14@example.com');
+    const oldTag = await seedTag(user.id, 'Old Tag');
+    const newTag = await seedTag(user.id, 'New Tag');
+    const note = await seedNote({ userId: user.id, title: 'Replace my tags' });
+    await prisma.noteTag.create({ data: { noteId: note.id, tagId: oldTag.id } });
+
+    const res = await request(app)
+      .patch(`/notes/${note.id}`)
+      .set('Authorization', authHeader(user.id))
+      .send({ tagIds: [newTag.id] });
+
+    expect(res.status).toBe(200);
+    const body = res.body as NoteResponse;
+    expect(body.tagIds).toEqual([newTag.id]);
+
+    const getRes = await request(app).get(`/notes/${note.id}`).set('Authorization', authHeader(user.id));
+    expect((getRes.body as NoteResponse).tagIds).toEqual([newTag.id]);
+
+    const remainingLinks = await prisma.noteTag.findMany({ where: { noteId: note.id } });
+    expect(remainingLinks).toHaveLength(1);
+    expect(remainingLinks[0]?.tagId).toBe(newTag.id);
+  });
+
+  it('AB-1006 #16 PATCH with only { title } (no tagIds key) -> 200, existing tag associations untouched', async () => {
+    const user = await seedUser('tagupdate16@example.com');
+    const tag = await seedTag(user.id, 'Keep Me');
+    const note = await seedNote({ userId: user.id, title: 'Title only update' });
+    await prisma.noteTag.create({ data: { noteId: note.id, tagId: tag.id } });
+
+    const res = await request(app)
+      .patch(`/notes/${note.id}`)
+      .set('Authorization', authHeader(user.id))
+      .send({ title: 'New title, tags untouched' });
+
+    expect(res.status).toBe(200);
+    const body = res.body as NoteResponse;
+    expect(body.title).toBe('New title, tags untouched');
+    expect(body.tagIds).toEqual([tag.id]);
+
+    const remainingLinks = await prisma.noteTag.findMany({ where: { noteId: note.id } });
+    expect(remainingLinks).toHaveLength(1);
+    expect(remainingLinks[0]?.tagId).toBe(tag.id);
+  });
+
+  it('AB-1006 #15 PATCH with an invalid/unowned tagIds entry -> 422 INVALID_TAG, no partial update applied (title/body/tags all unchanged)', async () => {
+    const user = await seedUser('tagupdate15@example.com');
+    const intruder = await seedUser('tagupdate15intruder@example.com');
+    const keptTag = await seedTag(user.id, 'Kept Tag');
+    const intruderTag = await seedTag(intruder.id, 'Not Yours');
+    const note = await seedNote({ userId: user.id, title: 'Original title' });
+    await prisma.noteTag.create({ data: { noteId: note.id, tagId: keptTag.id } });
+
+    const res = await request(app)
+      .patch(`/notes/${note.id}`)
+      .set('Authorization', authHeader(user.id))
+      .send({ title: 'Should not apply', tagIds: [intruderTag.id] });
+
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({ code: ErrorCodes.INVALID_TAG });
+
+    const getRes = await request(app).get(`/notes/${note.id}`).set('Authorization', authHeader(user.id));
+    expect(getRes.status).toBe(200);
+    const body = getRes.body as NoteResponse;
+    expect(body.title).toBe('Original title');
+    expect(body.tagIds).toEqual([keptTag.id]);
 
     const versions = await prisma.noteVersion.findMany({ where: { noteId: note.id } });
     expect(versions).toHaveLength(0);
@@ -498,22 +658,6 @@ describe('GET /notes', () => {
     expect(res.body).toMatchObject({ code: ErrorCodes.VALIDATION_FAILED });
   });
 
-  it('AB-1005 #6 tagIds present alongside normal seeded notes -> 200, silently ignored (Tag/NoteTag models deferred to AB-1006)', async () => {
-    const user = await seedUser('sort6tagids@example.com');
-    await seedNote({ userId: user.id, title: 'Note 1' });
-    await seedNote({ userId: user.id, title: 'Note 2' });
-
-    const res = await request(app)
-      .get('/notes')
-      .query({ tagIds: 'abc,def' })
-      .set('Authorization', authHeader(user.id));
-
-    expect(res.status).toBe(200);
-    const body = res.body as Page<NoteResponse>;
-    expect(body.totalItems).toBe(2);
-    expect(body.items).toHaveLength(2);
-  });
-
   it('AB-1005 #7 sort=updatedAt:desc composes correctly with pagination across two pages', async () => {
     const user = await seedUser('sort7pagination@example.com');
     const base = Date.now();
@@ -570,6 +714,68 @@ describe('GET /notes', () => {
       'Note 8',
       'Note 9',
     ]);
+  });
+
+  // AB-1006 (Tags Architecture) -- tagIds AND-filter on GET /notes, replacing
+  // the AB-1005-era placeholder that documented this as deferred.
+  // openspec/changes/AB-1006-tags-crud/spec.md Scenarios 17-19.
+
+  it('AB-1006 #17 tagIds=A,B where a note has both A and B and another note has only A -> only the both-tags note is returned (AND semantics)', async () => {
+    const user = await seedUser('tagfilter17@example.com');
+    const tagA = await seedTag(user.id, 'Tag A');
+    const tagB = await seedTag(user.id, 'Tag B');
+    const noteBoth = await seedNote({ userId: user.id, title: 'Has both tags' });
+    const noteOnlyA = await seedNote({ userId: user.id, title: 'Has only tag A' });
+    await prisma.noteTag.createMany({
+      data: [
+        { noteId: noteBoth.id, tagId: tagA.id },
+        { noteId: noteBoth.id, tagId: tagB.id },
+        { noteId: noteOnlyA.id, tagId: tagA.id },
+      ],
+    });
+
+    const res = await request(app)
+      .get('/notes')
+      .query({ tagIds: `${tagA.id},${tagB.id}` })
+      .set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as Page<NoteResponse>;
+    expect(body.items.map((n) => n.id)).toEqual([noteBoth.id]);
+    expect(body.totalItems).toBe(1);
+  });
+
+  it('AB-1006 #18 tagIds=<unowned-or-nonexistent-id> -> 200 with zero matching notes, not an error', async () => {
+    const user = await seedUser('tagfilter18@example.com');
+    await seedNote({ userId: user.id, title: 'Untagged note' });
+
+    const res = await request(app)
+      .get('/notes')
+      .query({ tagIds: 'nonexistent-tag-id' })
+      .set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as Page<NoteResponse>;
+    expect(body.items).toEqual([]);
+    expect(body.totalItems).toBe(0);
+  });
+
+  it('AB-1006 #19 GET /notes with no tagIds -> unchanged from AB-1005, all active notes returned, each carrying its tagIds array (possibly empty)', async () => {
+    const user = await seedUser('tagfilter19@example.com');
+    const tag = await seedTag(user.id, 'Solo Tag');
+    const taggedNote = await seedNote({ userId: user.id, title: 'Tagged' });
+    const untaggedNote = await seedNote({ userId: user.id, title: 'Untagged' });
+    await prisma.noteTag.create({ data: { noteId: taggedNote.id, tagId: tag.id } });
+
+    const res = await request(app).get('/notes').set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as Page<NoteResponse>;
+    expect(body.totalItems).toBe(2);
+    const tagged = body.items.find((n) => n.id === taggedNote.id);
+    const untagged = body.items.find((n) => n.id === untaggedNote.id);
+    expect(tagged?.tagIds).toEqual([tag.id]);
+    expect(untagged?.tagIds).toEqual([]);
   });
 });
 
@@ -656,6 +862,20 @@ describe('GET /notes/trash', () => {
     const body = res.body as Page<NoteResponse>;
     expect(body.items.map((n) => n.title)).toEqual(['Trashed 2', 'Trashed 1', 'Trashed 0']);
   });
+
+  it('AB-1006 #20b GET /notes/trash includes tagIds in its response', async () => {
+    const user = await seedUser('tagtrash20b@example.com');
+    const tag = await seedTag(user.id, 'Trash Tag');
+    const note = await seedNote({ userId: user.id, title: 'Trashed with tag', deletedAt: new Date() });
+    await prisma.noteTag.create({ data: { noteId: note.id, tagId: tag.id } });
+
+    const res = await request(app).get('/notes/trash').set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as Page<NoteResponse>;
+    const found = body.items.find((n) => n.id === note.id);
+    expect(found?.tagIds).toEqual([tag.id]);
+  });
 });
 
 describe('POST /notes/:id/restore', () => {
@@ -702,6 +922,27 @@ describe('POST /notes/:id/restore', () => {
 
     expect(res.status).toBe(404);
     expect(res.body).toMatchObject({ code: ErrorCodes.NOTE_NOT_FOUND });
+  });
+
+  it('AB-1006 #20c restoring a note whose tag was attached before soft-delete -> tagIds survives the delete/restore round trip', async () => {
+    const user = await seedUser('tagrestore20c@example.com');
+    const tag = await seedTag(user.id, 'Survivor Tag');
+    const note = await seedNote({ userId: user.id, title: 'Round trip' });
+    await prisma.noteTag.create({ data: { noteId: note.id, tagId: tag.id } });
+
+    const deleteRes = await request(app)
+      .delete(`/notes/${note.id}`)
+      .set('Authorization', authHeader(user.id));
+    expect(deleteRes.status).toBe(204);
+
+    const restoreRes = await request(app)
+      .post(`/notes/${note.id}/restore`)
+      .set('Authorization', authHeader(user.id));
+
+    expect(restoreRes.status).toBe(200);
+    const body = restoreRes.body as NoteResponse;
+    expect(body.deletedAt).toBeNull();
+    expect(body.tagIds).toEqual([tag.id]);
   });
 });
 
