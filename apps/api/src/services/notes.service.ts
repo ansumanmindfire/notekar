@@ -1,9 +1,22 @@
 import type { Note, Prisma, PrismaClient } from '@prisma/client';
 import { ErrorCodes } from 'shared/errorCodes';
-import type { CreateNoteInput, UpdateNoteInput, PaginationQuery } from 'shared/schemas';
+import type {
+  CreateNoteInput,
+  UpdateNoteInput,
+  PaginationQuery,
+  ListNotesQuery,
+  NoteSort,
+} from 'shared/schemas';
 import type { Page } from 'shared/types';
 import { AppError } from '../lib/AppError';
 import { extractPlainText } from '../lib/tiptap';
+
+const SORT_ORDER_BY: Record<NoteSort, Prisma.NoteOrderByWithRelationInput> = {
+  'createdAt:asc': { createdAt: 'asc' },
+  'createdAt:desc': { createdAt: 'desc' },
+  'updatedAt:asc': { updatedAt: 'asc' },
+  'updatedAt:desc': { updatedAt: 'desc' },
+};
 
 function notFound(): AppError {
   return new AppError(404, ErrorCodes.NOTE_NOT_FOUND, 'Note not found');
@@ -123,15 +136,15 @@ export async function restoreNote(prisma: PrismaClient, userId: string, id: stri
 export async function listNotes(
   prisma: PrismaClient,
   userId: string,
-  pagination: PaginationQuery,
+  query: ListNotesQuery,
 ): Promise<Page<Note>> {
-  const { page, pageSize } = pagination;
+  const { page, pageSize, sort } = query;
   const where = { userId, deletedAt: null };
 
   const [items, totalItems] = await Promise.all([
     prisma.note.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: SORT_ORDER_BY[sort],
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
