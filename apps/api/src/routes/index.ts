@@ -3,6 +3,7 @@ import type { ApiError } from 'shared/types';
 import { createAuthRouter, type AuthRouterEnv } from './auth.router';
 import { createNotesRouter } from './notes.router';
 import { createTagsRouter } from './tags.router';
+import { createSearchRouter } from './search.router';
 
 export function createRouter(env: AuthRouterEnv): Router {
   const router = Router();
@@ -10,6 +11,7 @@ export function createRouter(env: AuthRouterEnv): Router {
   router.use('/auth', createAuthRouter(env));
   router.use('/notes', createNotesRouter(env));
   router.use('/tags', createTagsRouter(env));
+  router.use('/search', createSearchRouter(env));
 
   router.use((req, res) => {
     const body: ApiError = {

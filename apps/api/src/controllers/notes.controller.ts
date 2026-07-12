@@ -19,9 +19,10 @@ import {
 
 // Derived from the service layer's own return type rather than importing
 // @prisma/client directly, so this controller depends only on notes.service.
-type PrismaNote = Awaited<ReturnType<typeof getNote>>;
+// Exported so search.controller.ts can reuse the identical note-shape mapping.
+export type PrismaNote = Awaited<ReturnType<typeof getNote>>;
 
-function toNoteResponse(note: PrismaNote): NoteResponse {
+export function toNoteResponse(note: PrismaNote): NoteResponse {
   return {
     id: note.id,
     title: note.title,
