@@ -1,0 +1,128 @@
+openapi: 3.0.3
+info:
+  title: NoteApp API — AB-1005 delta (Notes List & Filtering)
+  version: 1.0.0
+  description: >
+    Additive delta against the AB-1004 /notes contract. Adds a `sort` query
+    parameter to GET /notes (createdAt|updatedAt, asc|desc; default
+    createdAt:desc). GET /notes/trash is unchanged. Tag filtering (tagIds)
+    is explicitly deferred to AB-1006 and not part of this delta.
+
+paths:
+  /notes:
+    get:
+      summary: List active (non-deleted) notes
+      description: >
+        Adds sort on top of AB-1004's pagination-only contract. No tagIds
+        parameter yet — AB-1006 adds tag filtering to this same endpoint.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+        - name: sort
+          in: query
+          description: Sort field and direction. Defaults to createdAt:desc.
+          schema:
+            type: string
+            enum:
+              - createdAt:asc
+              - createdAt:desc
+              - updatedAt:asc
+              - updatedAt:desc
+            default: createdAt:desc
+      responses:
+        '200':
+          description: Paginated list of the caller's active notes, ordered per sort
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotePage'
+        '400':
+          description: Validation failed (invalid page, pageSize, or sort value)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Note:
+      type: object
+      required: [id, title, body, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: object
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    NotePage:
+      type: object
+      required: [items, page, pageSize, totalItems, totalPages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Note'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalItems:
+          type: integer
+        totalPages:
+          type: integer
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - AUTH_TOKEN_INVALID
+            - NOTE_NOT_FOUND
+        message:
+          type: string
+        fields:
+          type: array
+          items:
+            type: string
