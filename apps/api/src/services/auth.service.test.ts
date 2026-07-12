@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import bcrypt from 'bcrypt';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { AppError } from '../lib/AppError';
-import { registerUser, loginUser, refreshSession, logoutUser } from './auth.service';
+import { registerUser, loginUser, refreshSession, logoutUser, forgotPassword, resetPassword } from './auth.service';
 
 const JWT_SECRET = 'a'.repeat(32);
 const BCRYPT_ROUNDS = 4; // low rounds: keeps unit tests fast, still exercises real bcrypt
@@ -12,6 +12,7 @@ function createMockPrisma() {
     user: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
     },
     refreshToken: {
       findUnique: vi.fn(),
@@ -19,11 +20,23 @@ function createMockPrisma() {
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    passwordResetOtp: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
     $transaction: vi.fn(),
   } as unknown as PrismaClient & {
-    user: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+    user: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
     refreshToken: {
       findUnique: ReturnType<typeof vi.fn>;
+      create: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
+      updateMany: ReturnType<typeof vi.fn>;
+    };
+    passwordResetOtp: {
+      findFirst: ReturnType<typeof vi.fn>;
       create: ReturnType<typeof vi.fn>;
       update: ReturnType<typeof vi.fn>;
       updateMany: ReturnType<typeof vi.fn>;
@@ -317,6 +330,246 @@ describe('auth.service', () => {
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
       expect(prisma.user.create).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('for a known email, invalidates prior OTPs and creates a new one inside a single 2-operation $transaction, and logs via console.info', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'known@example.com',
+        passwordHash: 'irrelevant',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      prisma.passwordResetOtp.updateMany.mockResolvedValue({ count: 1 });
+      prisma.passwordResetOtp.create.mockResolvedValue({});
+      prisma.$transaction.mockImplementation((ops: unknown[]) => Promise.all(ops));
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+      await forgotPassword(prisma, { email: 'Known@Example.com' }, BCRYPT_ROUNDS);
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'known@example.com' } });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const transactionArg = prisma.$transaction.mock.calls[0]![0] as unknown[];
+      expect(transactionArg).toHaveLength(2);
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('for an unknown email, still runs a dummy bcrypt.hash (timing-safety branch) and resolves without touching passwordResetOtp at all', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      const hashSpy = vi.spyOn(bcrypt, 'hash');
+
+      await expect(forgotPassword(prisma, { email: 'nobody@example.com' }, BCRYPT_ROUNDS)).resolves.toBeUndefined();
+
+      expect(hashSpy).toHaveBeenCalledTimes(1);
+      expect(prisma.passwordResetOtp.create).not.toHaveBeenCalled();
+      expect(prisma.passwordResetOtp.updateMany).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('throws 401 AUTH_OTP_INVALID for an unknown email, and still runs bcrypt.compare once (timing-safety branch)', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      const compareSpy = vi.spyOn(bcrypt, 'compare');
+
+      let caught: unknown;
+      try {
+        await resetPassword(prisma, { email: 'nobody@example.com', otp: '123456', newPassword: 'Password1' }, BCRYPT_ROUNDS);
+      } catch (err) {
+        caught = err;
+      }
+
+      expectAppError(caught, 401, 'AUTH_OTP_INVALID');
+      expect(compareSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws 401 AUTH_OTP_INVALID when a known user has no active OTP row, and still runs bcrypt.compare once (dummy path)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'known@example.com',
+        passwordHash: 'irrelevant',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      prisma.passwordResetOtp.findFirst.mockResolvedValue(null);
+      const compareSpy = vi.spyOn(bcrypt, 'compare');
+
+      let caught: unknown;
+      try {
+        await resetPassword(
+          prisma,
+          { email: 'known@example.com', otp: '123456', newPassword: 'Password1' },
+          BCRYPT_ROUNDS,
+        );
+      } catch (err) {
+        caught = err;
+      }
+
+      expectAppError(caught, 401, 'AUTH_OTP_INVALID');
+      expect(compareSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws 401 AUTH_OTP_INVALID for an expired OTP row, still runs a real bcrypt.compare against the row hash (timing-safety branch), and does not decrement attempts', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'known@example.com',
+        passwordHash: 'irrelevant',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const otpHash = await bcrypt.hash('123456', BCRYPT_ROUNDS);
+      prisma.passwordResetOtp.findFirst.mockResolvedValue({
+        id: 'otp-1',
+        userId: 'user-1',
+        otpHash,
+        expiresAt: new Date(Date.now() - 60_000),
+        attemptsLeft: 5,
+        invalidated: false,
+        createdAt: new Date(),
+      });
+      const compareSpy = vi.spyOn(bcrypt, 'compare');
+
+      let caught: unknown;
+      try {
+        await resetPassword(
+          prisma,
+          { email: 'known@example.com', otp: '123456', newPassword: 'Password1' },
+          BCRYPT_ROUNDS,
+        );
+      } catch (err) {
+        caught = err;
+      }
+
+      expectAppError(caught, 401, 'AUTH_OTP_INVALID');
+      expect(prisma.passwordResetOtp.update).not.toHaveBeenCalled();
+      expect(compareSpy).toHaveBeenCalledTimes(1);
+      expect(compareSpy).toHaveBeenCalledWith('123456', otpHash);
+    });
+
+    it('on correct OTP + valid new password, runs a single 3-operation success $transaction and revokes all-device refresh tokens (not scoped by familyId)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'known@example.com',
+        passwordHash: 'irrelevant',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const otpHash = await bcrypt.hash('123456', BCRYPT_ROUNDS);
+      prisma.passwordResetOtp.findFirst.mockResolvedValue({
+        id: 'otp-1',
+        userId: 'user-1',
+        otpHash,
+        expiresAt: new Date(Date.now() + 60_000),
+        attemptsLeft: 5,
+        invalidated: false,
+        createdAt: new Date(),
+      });
+      prisma.user.update.mockResolvedValue({});
+      prisma.passwordResetOtp.update.mockResolvedValue({});
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
+      prisma.$transaction.mockImplementation((ops: unknown[]) => Promise.all(ops));
+
+      await resetPassword(
+        prisma,
+        { email: 'known@example.com', otp: '123456', newPassword: 'NewPassword1' },
+        BCRYPT_ROUNDS,
+      );
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const transactionArg = prisma.$transaction.mock.calls[0]![0] as unknown[];
+      expect(transactionArg).toHaveLength(3);
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledTimes(1);
+      const updateManyArgs = prisma.refreshToken.updateMany.mock.calls[0]![0] as {
+        where: { userId: string; revokedAt: null };
+        data: { revokedAt: Date };
+      };
+      expect(updateManyArgs.where).toEqual({ userId: 'user-1', revokedAt: null });
+      expect(updateManyArgs.data.revokedAt).toBeInstanceOf(Date);
+    });
+
+    it('on wrong OTP with attempts remaining, decrements attemptsLeft and does not additionally mark the row invalidated', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'known@example.com',
+        passwordHash: 'irrelevant',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const otpHash = await bcrypt.hash('123456', BCRYPT_ROUNDS);
+      prisma.passwordResetOtp.findFirst.mockResolvedValue({
+        id: 'otp-1',
+        userId: 'user-1',
+        otpHash,
+        expiresAt: new Date(Date.now() + 60_000),
+        attemptsLeft: 3,
+        invalidated: false,
+        createdAt: new Date(),
+      });
+      prisma.passwordResetOtp.update.mockResolvedValue({ attemptsLeft: 2 });
+
+      let caught: unknown;
+      try {
+        await resetPassword(
+          prisma,
+          { email: 'known@example.com', otp: '999999', newPassword: 'Password1' },
+          BCRYPT_ROUNDS,
+        );
+      } catch (err) {
+        caught = err;
+      }
+
+      expectAppError(caught, 401, 'AUTH_OTP_INVALID');
+      expect(prisma.passwordResetOtp.update).toHaveBeenCalledTimes(1);
+      expect(prisma.passwordResetOtp.update).toHaveBeenCalledWith({
+        where: { id: 'otp-1' },
+        data: { attemptsLeft: { decrement: 1 } },
+      });
+    });
+
+    it('on wrong OTP for the last remaining attempt, decrements attemptsLeft and then marks the row invalidated in a second update call', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'known@example.com',
+        passwordHash: 'irrelevant',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const otpHash = await bcrypt.hash('123456', BCRYPT_ROUNDS);
+      prisma.passwordResetOtp.findFirst.mockResolvedValue({
+        id: 'otp-1',
+        userId: 'user-1',
+        otpHash,
+        expiresAt: new Date(Date.now() + 60_000),
+        attemptsLeft: 1,
+        invalidated: false,
+        createdAt: new Date(),
+      });
+      prisma.passwordResetOtp.update.mockResolvedValueOnce({ attemptsLeft: 0 }).mockResolvedValueOnce({});
+
+      let caught: unknown;
+      try {
+        await resetPassword(
+          prisma,
+          { email: 'known@example.com', otp: '999999', newPassword: 'Password1' },
+          BCRYPT_ROUNDS,
+        );
+      } catch (err) {
+        caught = err;
+      }
+
+      expectAppError(caught, 401, 'AUTH_OTP_INVALID');
+      expect(prisma.passwordResetOtp.update).toHaveBeenCalledTimes(2);
+      expect(prisma.passwordResetOtp.update).toHaveBeenNthCalledWith(1, {
+        where: { id: 'otp-1' },
+        data: { attemptsLeft: { decrement: 1 } },
+      });
+      expect(prisma.passwordResetOtp.update).toHaveBeenNthCalledWith(2, {
+        where: { id: 'otp-1' },
+        data: { invalidated: true },
+      });
     });
   });
 });

@@ -13,9 +13,16 @@ const mockPrisma = vi.hoisted(() => ({
   user: {
     findUnique: vi.fn(),
     create: vi.fn(),
+    update: vi.fn(),
   },
   refreshToken: {
     findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  passwordResetOtp: {
+    findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
@@ -32,6 +39,8 @@ type AuthControllerEnv = Parameters<typeof createAuthController>[0];
 
 const JWT_SECRET = 'a'.repeat(32);
 const BCRYPT_ROUNDS = 4; // low rounds keep unit tests fast while still exercising real bcrypt
+const FORGOT_PASSWORD_GENERIC_MESSAGE =
+  'If an account with that email exists, a password reset code has been sent.';
 
 function createEnv(nodeEnv: 'development' | 'production' | 'test' = 'development'): AuthControllerEnv {
   return { JWT_SECRET, BCRYPT_ROUNDS, NODE_ENV: nodeEnv };
@@ -239,6 +248,184 @@ describe('auth.controller', () => {
       expect(res.clearCookie).toHaveBeenCalledTimes(1);
       expect(mockPrisma.refreshToken.updateMany).not.toHaveBeenCalled();
       expect(mockPrisma.refreshToken.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('valid body + known email -> 200 {message: <generic message>}', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'known@example.com',
+        passwordHash: 'irrelevant',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      mockPrisma.passwordResetOtp.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.passwordResetOtp.create.mockResolvedValue({});
+      mockPrisma.$transaction.mockImplementation((ops: unknown[]) => Promise.all(ops));
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+      const controller = createAuthController(createEnv());
+      const req = createMockReq({ body: { email: 'Known@Example.com' } });
+      const res = createMockRes();
+      const next = createMockNext();
+
+      await controller.forgotPassword(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ message: FORGOT_PASSWORD_GENERIC_MESSAGE });
+
+      infoSpy.mockRestore();
+    });
+
+    it('invalid body (malformed email) -> next(ZodError), does not call res.status/json, and never touches prisma', async () => {
+      const controller = createAuthController(createEnv());
+      const req = createMockReq({ body: { email: 'not-an-email' } });
+      const res = createMockRes();
+      const next = createMockNext();
+
+      await controller.forgotPassword(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = (next as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(err).toBeInstanceOf(ZodError);
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.json).not.toHaveBeenCalled();
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.passwordResetOtp.create).not.toHaveBeenCalled();
+      expect(mockPrisma.passwordResetOtp.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('unknown email -> still responds 200 with the SAME generic message (anti-enumeration)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      const controller = createAuthController(createEnv());
+      const req = createMockReq({ body: { email: 'nobody@example.com' } });
+      const res = createMockRes();
+      const next = createMockNext();
+
+      await controller.forgotPassword(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ message: FORGOT_PASSWORD_GENERIC_MESSAGE });
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('valid body, correct OTP, known user -> 204, res.send() called, no res.json call', async () => {
+      const otpHash = await bcrypt.hash('123456', BCRYPT_ROUNDS);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'known@example.com',
+        passwordHash: 'irrelevant',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      mockPrisma.passwordResetOtp.findFirst.mockResolvedValue({
+        id: 'otp-1',
+        userId: 'user-1',
+        otpHash,
+        expiresAt: new Date(Date.now() + 60_000),
+        attemptsLeft: 5,
+        invalidated: false,
+        createdAt: new Date(),
+      });
+      mockPrisma.user.update.mockResolvedValue({});
+      mockPrisma.passwordResetOtp.update.mockResolvedValue({});
+      mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.$transaction.mockImplementation((ops: unknown[]) => Promise.all(ops));
+
+      const controller = createAuthController(createEnv());
+      const req = createMockReq({
+        body: { email: 'known@example.com', otp: '123456', newPassword: 'NewPassword1' },
+      });
+      const res = createMockRes();
+      const next = createMockNext();
+
+      await controller.resetPassword(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(204);
+      expect(res.send).toHaveBeenCalledTimes(1);
+      expect(res.json).not.toHaveBeenCalled();
+    });
+
+    it('invalid body (OTP not 6 digits) -> next(ZodError), does not call res.status/send, and never touches prisma', async () => {
+      const controller = createAuthController(createEnv());
+      const req = createMockReq({
+        body: { email: 'known@example.com', otp: '12', newPassword: 'NewPassword1' },
+      });
+      const res = createMockRes();
+      const next = createMockNext();
+
+      await controller.resetPassword(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = (next as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(err).toBeInstanceOf(ZodError);
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.send).not.toHaveBeenCalled();
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.passwordResetOtp.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('invalid body (weak newPassword) -> next(ZodError), does not call res.status/send, and never touches prisma', async () => {
+      const controller = createAuthController(createEnv());
+      const req = createMockReq({
+        body: { email: 'known@example.com', otp: '123456', newPassword: 'weak' },
+      });
+      const res = createMockRes();
+      const next = createMockNext();
+
+      await controller.resetPassword(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = (next as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(err).toBeInstanceOf(ZodError);
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.send).not.toHaveBeenCalled();
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.passwordResetOtp.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('wrong OTP -> next(AppError 401 AUTH_OTP_INVALID)', async () => {
+      const otpHash = await bcrypt.hash('123456', BCRYPT_ROUNDS);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'known@example.com',
+        passwordHash: 'irrelevant',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      mockPrisma.passwordResetOtp.findFirst.mockResolvedValue({
+        id: 'otp-1',
+        userId: 'user-1',
+        otpHash,
+        expiresAt: new Date(Date.now() + 60_000),
+        attemptsLeft: 5,
+        invalidated: false,
+        createdAt: new Date(),
+      });
+      mockPrisma.passwordResetOtp.update.mockResolvedValue({ attemptsLeft: 4 });
+
+      const controller = createAuthController(createEnv());
+      const req = createMockReq({
+        body: { email: 'known@example.com', otp: '999999', newPassword: 'NewPassword1' },
+      });
+      const res = createMockRes();
+      const next = createMockNext();
+
+      await controller.resetPassword(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = (next as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(err).toBeInstanceOf(AppError);
+      expect((err as AppError).statusCode).toBe(401);
+      expect((err as AppError).code).toBe(ErrorCodes.AUTH_OTP_INVALID);
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.send).not.toHaveBeenCalled();
     });
   });
 });

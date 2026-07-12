@@ -15,6 +15,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   refreshTokens RefreshToken[]
+  otps          PasswordResetOtp[]
 }
 
 model RefreshToken {
@@ -30,4 +31,18 @@ model RefreshToken {
 
   @@index([userId])
   @@index([familyId])
+}
+
+model PasswordResetOtp {
+  id           String    @id @default(cuid())
+  userId       String
+  otpHash      String // bcrypt hash of the 6-digit code, never plaintext
+  expiresAt    DateTime
+  attemptsLeft Int       @default(5)
+  invalidated  Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

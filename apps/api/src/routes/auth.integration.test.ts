@@ -1,9 +1,14 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import bcrypt from 'bcrypt';
 import { ErrorCodes } from 'shared/errorCodes';
-import type { RegisterResponse, LoginResponse, RefreshResponse } from 'shared/types';
+import type {
+  RegisterResponse,
+  LoginResponse,
+  RefreshResponse,
+  ForgotPasswordResponse,
+} from 'shared/types';
 import { createApp } from '../app';
 import { prisma } from '../lib/prisma';
 import { hashToken } from '../lib/refreshToken';
@@ -30,6 +35,10 @@ function buildApp(): Express {
 async function resetDb(): Promise<void> {
   // Direct test-database cleanup between tests, not the application's
   // soft-delete rule (which only ever applies to the future Note model).
+  // PasswordResetOtp has an ON DELETE CASCADE FK to User at the DB level, so
+  // this line is technically a no-op once user.deleteMany() runs -- kept
+  // first anyway for explicitness/safety per AB-1003's own test-cleanup note.
+  await prisma.passwordResetOtp.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.user.deleteMany();
 }
@@ -87,6 +96,33 @@ async function loginAndGetTokens(
     refreshTokenRaw: extractRefreshCookieValue(res),
     res,
   };
+}
+
+// AB-1003: the raw 6-digit OTP is never returned in any API response (FR-AUTH-5
+// anti-enumeration) -- it only ever appears in a `console.info` dev-delivery
+// log (auth.service.ts's forgotPassword). Spying on console.info around the
+// /auth/forgot-password call is the only black-box way to recover the
+// plaintext code for a subsequent /auth/reset-password call in these tests.
+const OTP_LOG_PATTERN = /\[OTP\] Password reset code for \S+: (\d{6})/;
+
+async function requestOtp(app: Express, email: string): Promise<string> {
+  const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+  try {
+    const res = await request(app).post('/auth/forgot-password').send({ email });
+    expect(res.status).toBe(200);
+
+    for (const call of infoSpy.mock.calls) {
+      const match = OTP_LOG_PATTERN.exec(String(call[0]));
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
+    throw new Error(
+      `Expected a "[OTP] Password reset code for ..." console.info log for ${email}, but none was captured`,
+    );
+  } finally {
+    infoSpy.mockRestore();
+  }
 }
 
 beforeEach(async () => {
@@ -345,5 +381,307 @@ describe('POST /auth/logout', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .set('Cookie', `refreshToken=${refreshTokenRaw}`);
     expect(secondLogout.status).toBe(204);
+  });
+});
+
+describe('POST /auth/forgot-password', () => {
+  // AB-1003. Own describe block, but a shared app is safe here: the
+  // forgot-password limiter is 3/hr *per email*, and every test below uses a
+  // distinct email, so none of these calls compete for the same bucket.
+  const app = buildApp();
+
+  it('#1 forgot-password for a registered email -> 200 generic message; OTP row created with attemptsLeft: 5, invalidated: false, expiresAt ~15 min out', async () => {
+    const user = await seedUser('forgot1@example.com');
+
+    const directRes = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: user.email });
+    expect(directRes.status).toBe(200);
+    const directBody = directRes.body as ForgotPasswordResponse;
+    expect(typeof directBody.message).toBe('string');
+    expect(directBody.message.length).toBeGreaterThan(0);
+
+    const before = Date.now();
+    const otp = await requestOtp(app, user.email);
+    expect(otp).toMatch(/^\d{6}$/);
+
+    const row = await prisma.passwordResetOtp.findFirst({
+      where: { userId: user.id, invalidated: false },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(row).not.toBeNull();
+    expect(row?.attemptsLeft).toBe(5);
+    expect(row?.invalidated).toBe(false);
+
+    const expectedExpiry = before + 15 * 60 * 1000;
+    const lowerBound = expectedExpiry - 60 * 1000; // now + 14min
+    const upperBound = expectedExpiry + 60 * 1000; // now + 16min
+    expect(row?.expiresAt.getTime()).toBeGreaterThan(lowerBound);
+    expect(row?.expiresAt.getTime()).toBeLessThan(upperBound);
+  });
+
+  it('#2 forgot-password for an unregistered email -> identical 200 generic message; no OTP row created', async () => {
+    const user = await seedUser('registered2@example.com');
+
+    const registeredRes = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: user.email });
+    const unregisteredRes = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: 'ghost2@example.com' });
+
+    expect(registeredRes.status).toBe(200);
+    expect(unregisteredRes.status).toBe(200);
+    expect(unregisteredRes.body).toEqual(registeredRes.body);
+
+    // Only the registered call above should have produced a row; if the
+    // unregistered call had created one too this count would be 2.
+    const totalOtpRows = await prisma.passwordResetOtp.count();
+    expect(totalOtpRows).toBe(1);
+  });
+
+  it('#3 forgot-password requested twice for the same user -> only the newest OTP row is un-invalidated', async () => {
+    const user = await seedUser('twice3@example.com');
+
+    await requestOtp(app, user.email);
+    await requestOtp(app, user.email);
+
+    const rows = await prisma.passwordResetOtp.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.invalidated).toBe(true);
+    expect(rows[1]?.invalidated).toBe(false);
+  });
+});
+
+describe('POST /auth/forgot-password — rate limit', () => {
+  // Fresh app for isolated rate-limiter state, matching the register/login
+  // rate-limit test pattern above.
+  it('#4 blocks the 4th forgot-password request within an hour for the same email; a different email is unaffected', async () => {
+    const app = buildApp();
+    const user = await seedUser('ratelimited4@example.com');
+
+    const first = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: user.email });
+    const second = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: user.email });
+    const third = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: user.email });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(third.status).toBe(200);
+
+    const fourth = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: user.email });
+    expect(fourth.status).toBe(429);
+    expect(fourth.body).toMatchObject({ code: ErrorCodes.RATE_LIMITED });
+
+    // Proves the limiter is keyed by normalized email, not IP: a different
+    // email from the very same (supertest, same-process) "IP" is unaffected.
+    const otherEmail = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: 'unrelated4@example.com' });
+    expect(otherEmail.status).toBe(200);
+  });
+
+  // AB-1003 plan.md risk #5: forgotPasswordRateLimitKey's IP fallback (the
+  // ipKeyGenerator branch in auth.router.ts) only fires when req.body has no
+  // usable string email. Since the rate limiter is mounted *before* the
+  // controller's Zod validation, a malformed body still gets counted against
+  // an IP-keyed bucket even though the controller itself later rejects it
+  // with 400 -- proving a client can't dodge the limiter by simply omitting
+  // (or mistyping) the email field. Note this IP-fallback bucket is separate
+  // from any given email's bucket (the keyGenerator prefers the email when
+  // present), so the 4th call that finally trips 429 must itself be another
+  // malformed (IP-keyed) request, not a valid-email one -- a valid, distinct
+  // email always starts its own fresh per-email bucket regardless of how
+  // many malformed requests preceded it from the same IP.
+  it('#5 falls back to IP-keying malformed-body requests, so 3 malformed calls exhaust that bucket and a 4th malformed call from the same IP is rate limited, not merely re-validated', async () => {
+    const app = buildApp();
+
+    const first = await request(app).post('/auth/forgot-password').send({});
+    const second = await request(app).post('/auth/forgot-password').send({ email: 123 });
+    const third = await request(app).post('/auth/forgot-password').send({});
+
+    expect(first.status).toBe(400);
+    expect(first.body).toMatchObject({ code: ErrorCodes.VALIDATION_FAILED });
+    expect(second.status).toBe(400);
+    expect(second.body).toMatchObject({ code: ErrorCodes.VALIDATION_FAILED });
+    expect(third.status).toBe(400);
+    expect(third.body).toMatchObject({ code: ErrorCodes.VALIDATION_FAILED });
+
+    // Same IP-fallback bucket as the three calls above (still no usable
+    // email) -- if the limiter hadn't counted those malformed calls, this
+    // would come back another 400 instead of 429.
+    const fourth = await request(app).post('/auth/forgot-password').send({});
+    expect(fourth.status).toBe(429);
+    expect(fourth.body).toMatchObject({ code: ErrorCodes.RATE_LIMITED });
+
+    // A valid, distinct email starts its own separate per-email bucket, so
+    // it is unaffected by the exhausted IP-fallback bucket above.
+    const fifth = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: 'stillbucketed5@example.com' });
+    expect(fifth.status).toBe(200);
+  });
+});
+
+describe('POST /auth/reset-password', () => {
+  const app = buildApp();
+
+  it('#5 resets the password with a correct OTP and valid new password -> 204; passwordHash changes; OTP row invalidated', async () => {
+    const user = await seedUser('reset5@example.com');
+    const otp = await requestOtp(app, user.email);
+    const newPassword = 'NewPassword123';
+
+    const res = await request(app)
+      .post('/auth/reset-password')
+      .send({ email: user.email, otp, newPassword });
+
+    expect(res.status).toBe(204);
+
+    const updated = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(updated).not.toBeNull();
+    expect(await bcrypt.compare(user.rawPassword, updated?.passwordHash ?? '')).toBe(false);
+    expect(await bcrypt.compare(newPassword, updated?.passwordHash ?? '')).toBe(true);
+
+    const otpRow = await prisma.passwordResetOtp.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(otpRow?.invalidated).toBe(true);
+  });
+
+  it('#6 rejects a weak new password even with a correct OTP -> 400 VALIDATION_FAILED; attemptsLeft unchanged', async () => {
+    const user = await seedUser('reset6@example.com');
+    const otp = await requestOtp(app, user.email);
+
+    const res = await request(app)
+      .post('/auth/reset-password')
+      .send({ email: user.email, otp, newPassword: 'weak' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: ErrorCodes.VALIDATION_FAILED });
+
+    const otpRow = await prisma.passwordResetOtp.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(otpRow?.attemptsLeft).toBe(5);
+    expect(otpRow?.invalidated).toBe(false);
+  });
+
+  it('#7 rejects a wrong OTP (1st attempt) -> 401 AUTH_OTP_INVALID; attemptsLeft decremented to 4', async () => {
+    const user = await seedUser('reset7@example.com');
+    const otp = await requestOtp(app, user.email);
+    const wrongOtp = otp === '000000' ? '111111' : '000000';
+
+    const res = await request(app)
+      .post('/auth/reset-password')
+      .send({ email: user.email, otp: wrongOtp, newPassword: VALID_PASSWORD });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: ErrorCodes.AUTH_OTP_INVALID });
+
+    const otpRow = await prisma.passwordResetOtp.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(otpRow?.attemptsLeft).toBe(4);
+  });
+
+  it('#8 invalidates the OTP row on the 5th wrong attempt; the correct code afterward still fails', async () => {
+    const user = await seedUser('reset8@example.com');
+    const otp = await requestOtp(app, user.email);
+    const wrongOtp = otp === '000000' ? '111111' : '000000';
+
+    for (let i = 0; i < 5; i += 1) {
+      const res = await request(app)
+        .post('/auth/reset-password')
+        .send({ email: user.email, otp: wrongOtp, newPassword: VALID_PASSWORD });
+      expect(res.status).toBe(401);
+      expect(res.body).toMatchObject({ code: ErrorCodes.AUTH_OTP_INVALID });
+    }
+
+    const otpRow = await prisma.passwordResetOtp.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(otpRow?.invalidated).toBe(true);
+
+    const correctAttempt = await request(app)
+      .post('/auth/reset-password')
+      .send({ email: user.email, otp, newPassword: VALID_PASSWORD });
+    expect(correctAttempt.status).toBe(401);
+    expect(correctAttempt.body).toMatchObject({ code: ErrorCodes.AUTH_OTP_INVALID });
+  });
+
+  it('#9 rejects reset-password after the OTPs 15-minute expiry, even with the correct code', async () => {
+    const user = await seedUser('reset9@example.com');
+    const otp = await requestOtp(app, user.email);
+
+    const otpRow = await prisma.passwordResetOtp.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(otpRow).not.toBeNull();
+    const otpId = otpRow?.id;
+    if (!otpId) {
+      throw new Error('Expected an OTP row id');
+    }
+    await prisma.passwordResetOtp.update({
+      where: { id: otpId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const res = await request(app)
+      .post('/auth/reset-password')
+      .send({ email: user.email, otp, newPassword: VALID_PASSWORD });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: ErrorCodes.AUTH_OTP_INVALID });
+  });
+
+  it('#10 rejects reset-password for an unregistered email -> 401 AUTH_OTP_INVALID, indistinguishable from a wrong-OTP response', async () => {
+    const res = await request(app)
+      .post('/auth/reset-password')
+      .send({ email: 'ghost10@example.com', otp: '123456', newPassword: VALID_PASSWORD });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      code: ErrorCodes.AUTH_OTP_INVALID,
+      message: expect.any(String),
+    });
+  });
+
+  it('#11 revokes both devices refresh tokens on a successful reset, so /auth/refresh from either device fails afterward', async () => {
+    const user = await seedUser('reset11@example.com');
+    const deviceX = await loginAndGetTokens(app, user.email);
+    const deviceY = await loginAndGetTokens(app, user.email);
+
+    const otp = await requestOtp(app, user.email);
+    const res = await request(app)
+      .post('/auth/reset-password')
+      .send({ email: user.email, otp, newPassword: 'BrandNewPassword1' });
+    expect(res.status).toBe(204);
+
+    const refreshX = await request(app)
+      .post('/auth/refresh')
+      .set('Cookie', `refreshToken=${deviceX.refreshTokenRaw}`);
+    const refreshY = await request(app)
+      .post('/auth/refresh')
+      .set('Cookie', `refreshToken=${deviceY.refreshTokenRaw}`);
+
+    expect(refreshX.status).toBe(401);
+    expect(refreshX.body).toMatchObject({ code: ErrorCodes.AUTH_REFRESH_INVALID });
+    expect(refreshY.status).toBe(401);
+    expect(refreshY.body).toMatchObject({ code: ErrorCodes.AUTH_REFRESH_INVALID });
   });
 });

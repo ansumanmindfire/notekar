@@ -43,7 +43,7 @@ EXECUTION LOOP — for each unchecked task in openspec/changes/$ARGUMENTS/tasks.
 
   STEP 4 — Triage findings
     Read the tester and reviewer findings from the immediate chat context.
-    - Case A: All [OK] → mark task done.
+    - Case A: All [OK] → Use a file-editing tool to literally edit openspec/changes/$ARGUMENTS/tasks.md on the hard drive and change the [ ] to an [x] for this specific task.
     - Case B: Tester failures OR [WARN]/[FAIL] findings → Propose fixes directly in the chat. Apply them after receiving user approval.
     - Case C: Any [SEC] → HALT. Surface to user.
 
