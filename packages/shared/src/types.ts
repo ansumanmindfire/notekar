@@ -31,3 +31,7 @@ export interface LoginResponse {
 export interface RefreshResponse {
   accessToken: string;
 }
+
+export interface ForgotPasswordResponse {
+  message: string;
+}
