@@ -6,6 +6,7 @@ export const ErrorCodes = {
   USER_EXISTS: 'USER_EXISTS',
   AUTH_OTP_INVALID: 'AUTH_OTP_INVALID',
   RATE_LIMITED: 'RATE_LIMITED',
+  NOTE_NOT_FOUND: 'NOTE_NOT_FOUND',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

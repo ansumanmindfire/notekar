@@ -35,3 +35,15 @@ export interface RefreshResponse {
 export interface ForgotPasswordResponse {
   message: string;
 }
+
+export type TipTapDocument = Record<string, unknown>;
+
+export interface Note {
+  id: string;
+  title: string;
+  body: TipTapDocument;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
