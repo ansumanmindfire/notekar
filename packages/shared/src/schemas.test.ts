@@ -7,6 +7,8 @@ import {
   createNoteSchema,
   updateNoteSchema,
   paginationQuerySchema,
+  noteSortSchema,
+  listNotesQuerySchema,
 } from './schemas';
 
 describe('registerSchema', () => {
@@ -471,6 +473,130 @@ describe('paginationQuerySchema', () => {
 
   it('rejects a negative page', () => {
     const result = paginationQuerySchema.safeParse({ page: -1 });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'page')).toBe(true);
+    }
+  });
+});
+
+describe('noteSortSchema', () => {
+  it.each(['createdAt:asc', 'createdAt:desc', 'updatedAt:asc', 'updatedAt:desc'] as const)(
+    'accepts the valid sort value %s unchanged',
+    (sortValue) => {
+      const result = noteSortSchema.safeParse(sortValue);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toBe(sortValue);
+      }
+    },
+  );
+
+  it('defaults to createdAt:desc when input is undefined', () => {
+    const result = noteSortSchema.safeParse(undefined);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toBe('createdAt:desc');
+    }
+  });
+
+  it('rejects a value outside the enum', () => {
+    const result = noteSortSchema.safeParse('title:desc');
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('listNotesQuerySchema', () => {
+  it.each(['createdAt:asc', 'createdAt:desc', 'updatedAt:asc', 'updatedAt:desc'] as const)(
+    'parses a valid sort value %s unchanged',
+    (sortValue) => {
+      const result = listNotesQuerySchema.safeParse({ sort: sortValue });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.sort).toBe(sortValue);
+      }
+    },
+  );
+
+  it('defaults sort to createdAt:desc when omitted', () => {
+    const result = listNotesQuerySchema.safeParse({});
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sort).toBe('createdAt:desc');
+    }
+  });
+
+  it('rejects an out-of-enum sort value', () => {
+    const result = listNotesQuerySchema.safeParse({ sort: 'title:desc' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'sort')).toBe(true);
+    }
+  });
+
+  it('rejects an arbitrary garbage sort value', () => {
+    const result = listNotesQuerySchema.safeParse({ sort: 'not-a-real-sort-value' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'sort')).toBe(true);
+    }
+  });
+
+  it('still defaults page to 1 and pageSize to 10 when only sort is provided', () => {
+    const result = listNotesQuerySchema.safeParse({ sort: 'updatedAt:asc' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.page).toBe(1);
+      expect(result.data.pageSize).toBe(10);
+    }
+  });
+
+  it('coerces string-based numeric page/pageSize query input into numbers', () => {
+    const result = listNotesQuerySchema.safeParse({
+      page: '2',
+      pageSize: '25',
+      sort: 'updatedAt:desc',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.page).toBe(2);
+      expect(result.data.pageSize).toBe(25);
+    }
+  });
+
+  it('rejects a pageSize of 51 (over the cap of 50) even with a valid sort', () => {
+    const result = listNotesQuerySchema.safeParse({ pageSize: 51, sort: 'createdAt:asc' });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'pageSize')).toBe(true);
+    }
+  });
+
+  it('accepts a pageSize of exactly 50 (at the cap)', () => {
+    const result = listNotesQuerySchema.safeParse({ pageSize: 50 });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.pageSize).toBe(50);
+    }
+  });
+
+  it('rejects a page of 0 even with a valid sort', () => {
+    const result = listNotesQuerySchema.safeParse({ page: 0, sort: 'createdAt:asc' });
 
     expect(result.success).toBe(false);
     if (!result.success) {

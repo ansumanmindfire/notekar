@@ -1,5 +1,10 @@
 import type { NextFunction, Request, Response } from 'express';
-import { createNoteSchema, updateNoteSchema, paginationQuerySchema } from 'shared/schemas';
+import {
+  createNoteSchema,
+  updateNoteSchema,
+  paginationQuerySchema,
+  listNotesQuerySchema,
+} from 'shared/schemas';
 import type { Note as NoteResponse, Page } from 'shared/types';
 import { prisma } from '../lib/prisma';
 import {
@@ -80,8 +85,8 @@ export function createNotesController() {
 
     async list(req: Request, res: Response, next: NextFunction): Promise<void> {
       try {
-        const pagination = paginationQuerySchema.parse(req.query);
-        const page = await listNotes(prisma, req.userId!, pagination);
+        const query = listNotesQuerySchema.parse(req.query);
+        const page = await listNotes(prisma, req.userId!, query);
         res.status(200).json(toNotePageResponse(page));
       } catch (err) {
         next(err);

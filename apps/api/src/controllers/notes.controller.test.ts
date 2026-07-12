@@ -266,6 +266,7 @@ describe('notes.controller', () => {
       expect(mockService.listNotes).toHaveBeenCalledWith(expect.anything(), USER_ID, {
         page: 1,
         pageSize: 10,
+        sort: 'createdAt:desc',
       });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
@@ -307,8 +308,50 @@ describe('notes.controller', () => {
       expect(mockService.listNotes).toHaveBeenCalledWith(expect.anything(), USER_ID, {
         page: 2,
         pageSize: 5,
+        sort: 'createdAt:desc',
       });
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('sort=updatedAt:asc in query -> passed through to the service alongside default page/pageSize', async () => {
+      const controller = createNotesController();
+      mockService.listNotes.mockResolvedValue({
+        items: [],
+        page: 1,
+        pageSize: 10,
+        totalItems: 0,
+        totalPages: 0,
+      });
+
+      const req = createMockReq({ query: { sort: 'updatedAt:asc' } });
+      const res = createMockRes();
+      const next = createMockNext();
+
+      await controller.list(req, res, next);
+
+      expect(mockService.listNotes).toHaveBeenCalledWith(expect.anything(), USER_ID, {
+        page: 1,
+        pageSize: 10,
+        sort: 'updatedAt:asc',
+      });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('invalid sort value -> next(ZodError), no service call, no response sent', async () => {
+      const controller = createNotesController();
+      const req = createMockReq({ query: { sort: 'title:desc' } });
+      const res = createMockRes();
+      const next = createMockNext();
+
+      await controller.list(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const err = (next as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(err).toBeInstanceOf(ZodError);
+      expect(mockService.listNotes).not.toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.json).not.toHaveBeenCalled();
     });
   });
 

@@ -16,6 +16,10 @@ import { purgeNotes } from '../lib/jobs/purgeNotes';
 // (the purgeNotes cron job itself) is covered by lib/jobs/purgeNotes.test.ts
 // and is not duplicated here -- purgeNotes is only invoked directly below to
 // simulate Scenario 13's "restore after purge" case.
+//
+// AB-1005 (Notes List & Filtering) extends this suite with Scenarios 1-8 of
+// openspec/changes/AB-1005-notes-listing/spec.md, covering the new `sort`
+// query param on GET /notes and confirming GET /notes/trash is untouched.
 
 const TEST_ENV = {
   WEB_ORIGIN: 'http://localhost:5173',
@@ -345,6 +349,228 @@ describe('GET /notes', () => {
     expect(body.items.find((n) => n.id === trashed.id)).toBeUndefined();
     expect(body.totalItems).toBe(1);
   });
+
+  // AB-1005 (Notes List & Filtering) -- sort query param coverage.
+  // openspec/changes/AB-1005-notes-listing/spec.md Scenarios 2-7.
+
+  it('AB-1005 #2 sort=createdAt:asc -> oldest-created note first', async () => {
+    const user = await seedUser('sort2createdasc@example.com');
+    const base = Date.now();
+
+    for (let i = 0; i < 5; i += 1) {
+      await seedNote({
+        userId: user.id,
+        title: `Note ${i}`,
+        createdAt: new Date(base + i * 1000),
+      });
+    }
+
+    const res = await request(app)
+      .get('/notes')
+      .query({ sort: 'createdAt:asc' })
+      .set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as Page<NoteResponse>;
+    expect(body.items.map((n) => n.title)).toEqual([
+      'Note 0',
+      'Note 1',
+      'Note 2',
+      'Note 3',
+      'Note 4',
+    ]);
+  });
+
+  it('AB-1005 sort=createdAt:desc (explicit) -> newest-created note first, same as the default order', async () => {
+    const user = await seedUser('sortcreateddesc@example.com');
+    const base = Date.now();
+
+    for (let i = 0; i < 5; i += 1) {
+      await seedNote({
+        userId: user.id,
+        title: `Note ${i}`,
+        createdAt: new Date(base + i * 1000),
+      });
+    }
+
+    const res = await request(app)
+      .get('/notes')
+      .query({ sort: 'createdAt:desc' })
+      .set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as Page<NoteResponse>;
+    expect(body.items.map((n) => n.title)).toEqual([
+      'Note 4',
+      'Note 3',
+      'Note 2',
+      'Note 1',
+      'Note 0',
+    ]);
+  });
+
+  it('AB-1005 #3 sort=updatedAt:desc -> most-recently-updated note first, even though it was created oldest (plan.md Risk Area 5)', async () => {
+    const user = await seedUser('sort3updateddesc@example.com');
+    const base = Date.now();
+
+    const noteA = await seedNote({
+      userId: user.id,
+      title: 'Note A (oldest created)',
+      createdAt: new Date(base),
+    });
+    const noteB = await seedNote({
+      userId: user.id,
+      title: 'Note B',
+      createdAt: new Date(base + 1000),
+    });
+    const noteC = await seedNote({
+      userId: user.id,
+      title: 'Note C (newest created)',
+      createdAt: new Date(base + 2000),
+    });
+
+    // PATCH the OLDEST-created note last, so its updatedAt diverges from
+    // createdAt order -- a same-timestamp seed would pass even with a
+    // broken updatedAt sort.
+    const patchRes = await request(app)
+      .patch(`/notes/${noteA.id}`)
+      .set('Authorization', authHeader(user.id))
+      .send({ title: 'Note A (oldest created, just updated)' });
+    expect(patchRes.status).toBe(200);
+
+    const res = await request(app)
+      .get('/notes')
+      .query({ sort: 'updatedAt:desc' })
+      .set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as Page<NoteResponse>;
+    expect(body.items.map((n) => n.id)).toEqual([noteA.id, noteC.id, noteB.id]);
+  });
+
+  it('AB-1005 #4 sort=updatedAt:asc -> least-recently-updated note first', async () => {
+    const user = await seedUser('sort4updatedasc@example.com');
+    const base = Date.now();
+
+    const noteA = await seedNote({
+      userId: user.id,
+      title: 'Note A (oldest created)',
+      createdAt: new Date(base),
+    });
+    const noteB = await seedNote({
+      userId: user.id,
+      title: 'Note B',
+      createdAt: new Date(base + 1000),
+    });
+    const noteC = await seedNote({
+      userId: user.id,
+      title: 'Note C (newest created)',
+      createdAt: new Date(base + 2000),
+    });
+
+    // Same setup as the updatedAt:desc case above, opposite assertion.
+    const patchRes = await request(app)
+      .patch(`/notes/${noteA.id}`)
+      .set('Authorization', authHeader(user.id))
+      .send({ title: 'Note A (oldest created, just updated)' });
+    expect(patchRes.status).toBe(200);
+
+    const res = await request(app)
+      .get('/notes')
+      .query({ sort: 'updatedAt:asc' })
+      .set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as Page<NoteResponse>;
+    expect(body.items.map((n) => n.id)).toEqual([noteB.id, noteC.id, noteA.id]);
+  });
+
+  it('AB-1005 #5 sort=title:desc (out-of-enum value) -> 400 VALIDATION_FAILED', async () => {
+    const user = await seedUser('sort5invalid@example.com');
+    await seedNote({ userId: user.id, title: 'Irrelevant' });
+
+    const res = await request(app)
+      .get('/notes')
+      .query({ sort: 'title:desc' })
+      .set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: ErrorCodes.VALIDATION_FAILED });
+  });
+
+  it('AB-1005 #6 tagIds present alongside normal seeded notes -> 200, silently ignored (Tag/NoteTag models deferred to AB-1006)', async () => {
+    const user = await seedUser('sort6tagids@example.com');
+    await seedNote({ userId: user.id, title: 'Note 1' });
+    await seedNote({ userId: user.id, title: 'Note 2' });
+
+    const res = await request(app)
+      .get('/notes')
+      .query({ tagIds: 'abc,def' })
+      .set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as Page<NoteResponse>;
+    expect(body.totalItems).toBe(2);
+    expect(body.items).toHaveLength(2);
+  });
+
+  it('AB-1005 #7 sort=updatedAt:desc composes correctly with pagination across two pages', async () => {
+    const user = await seedUser('sort7pagination@example.com');
+    const base = Date.now();
+
+    const notes: { id: string; title: string }[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      const note = await seedNote({
+        userId: user.id,
+        title: `Note ${i}`,
+        createdAt: new Date(base + i * 1000),
+      });
+      notes.push(note);
+    }
+
+    // Force updatedAt to be the EXACT INVERSE of createdAt order (Note 0
+    // gets the newest updatedAt, Note 11 the oldest), so this test can only
+    // pass if pagination genuinely sorts by updatedAt across both pages,
+    // rather than silently falling back to createdAt order.
+    for (let i = 0; i < notes.length; i += 1) {
+      const note = notes[i];
+      if (!note) continue;
+      await prisma.note.update({
+        where: { id: note.id },
+        data: { updatedAt: new Date(base + (11 - i) * 1000) },
+      });
+    }
+
+    const page1 = await request(app)
+      .get('/notes')
+      .query({ sort: 'updatedAt:desc', page: 1, pageSize: 5 })
+      .set('Authorization', authHeader(user.id));
+    expect(page1.status).toBe(200);
+    const page1Body = page1.body as Page<NoteResponse>;
+    expect(page1Body.totalItems).toBe(12);
+    expect(page1Body.totalPages).toBe(3);
+    expect(page1Body.items.map((n) => n.title)).toEqual([
+      'Note 0',
+      'Note 1',
+      'Note 2',
+      'Note 3',
+      'Note 4',
+    ]);
+
+    const page2 = await request(app)
+      .get('/notes')
+      .query({ sort: 'updatedAt:desc', page: 2, pageSize: 5 })
+      .set('Authorization', authHeader(user.id));
+    expect(page2.status).toBe(200);
+    const page2Body = page2.body as Page<NoteResponse>;
+    expect(page2Body.items.map((n) => n.title)).toEqual([
+      'Note 5',
+      'Note 6',
+      'Note 7',
+      'Note 8',
+      'Note 9',
+    ]);
+  });
 });
 
 describe('GET /notes/trash', () => {
@@ -407,6 +633,28 @@ describe('GET /notes/trash', () => {
     expect(body.items).toEqual([]);
     expect(body.totalItems).toBe(0);
     expect(res.body).not.toMatchObject({ code: ErrorCodes.NOTE_NOT_FOUND });
+  });
+
+  it('AB-1005 #8 a stray sort query param has no effect -- order stays deletedAt desc (AB-1004 contract untouched)', async () => {
+    const user = await seedUser('sort8trashstray@example.com');
+    const base = Date.now();
+
+    for (let i = 0; i < 3; i += 1) {
+      await seedNote({
+        userId: user.id,
+        title: `Trashed ${i}`,
+        deletedAt: new Date(base + i * 1000),
+      });
+    }
+
+    const res = await request(app)
+      .get('/notes/trash')
+      .query({ sort: 'updatedAt:asc' })
+      .set('Authorization', authHeader(user.id));
+
+    expect(res.status).toBe(200);
+    const body = res.body as Page<NoteResponse>;
+    expect(body.items.map((n) => n.title)).toEqual(['Trashed 2', 'Trashed 1', 'Trashed 0']);
   });
 });
 
