@@ -26,6 +26,7 @@ function toNoteResponse(note: PrismaNote): NoteResponse {
     id: note.id,
     title: note.title,
     body: note.body as NoteResponse['body'],
+    tagIds: note.tags.map((t) => t.tagId),
     version: note.version,
     createdAt: note.createdAt.toISOString(),
     updatedAt: note.updatedAt.toISOString(),
