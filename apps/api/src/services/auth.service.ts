@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { ErrorCodes } from 'shared/errorCodes';
-import type { RegisterInput, LoginInput } from 'shared/schemas';
+import type { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from 'shared/schemas';
 import { AppError } from '../lib/AppError';
 import { signAccessToken } from '../lib/jwt';
 import { generateOpaqueToken, hashToken } from '../lib/refreshToken';
+import { generateOtp } from '../lib/otp';
 
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const OTP_TTL_MS = 15 * 60 * 1000;
 const DUMMY_PASSWORD_FOR_TIMING = 'dummy-password-for-timing-safety';
 
 // Cached per bcryptRounds value so the "user not found" path always costs the
@@ -174,4 +176,121 @@ export async function logoutUser(prisma: PrismaClient, rawToken: string | undefi
     where: { token: hashToken(rawToken), revokedAt: null },
     data: { revokedAt: new Date() },
   });
+}
+
+export async function forgotPassword(
+  prisma: PrismaClient,
+  input: ForgotPasswordInput,
+  bcryptRounds: number,
+): Promise<void> {
+  const email = input.email.toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  if (!user) {
+    // Timing-safety mirror of loginUser/resetPassword: run a real bcrypt.hash
+    // of comparable cost even though there's no OTP to create, so response
+    // time doesn't reveal whether the email is registered. Identical generic
+    // outcome either way (FR-AUTH-5 anti-enumeration): no OTP row is
+    // created, no email is "sent".
+    await bcrypt.hash(DUMMY_PASSWORD_FOR_TIMING, bcryptRounds);
+    return;
+  }
+
+  const otp = generateOtp();
+  const otpHash = await bcrypt.hash(otp, bcryptRounds);
+  const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+  await prisma.$transaction([
+    // Reissuing invalidates any prior outstanding OTP so only the newest is ever valid.
+    prisma.passwordResetOtp.updateMany({
+      where: { userId: user.id, invalidated: false },
+      data: { invalidated: true },
+    }),
+    prisma.passwordResetOtp.create({
+      data: { userId: user.id, otpHash, expiresAt },
+    }),
+  ]);
+
+  // No real email service in this project (FRS §1.2) - the OTP is logged
+  // server-side instead. `otp`/`token` keys are already redacted by the pino
+  // logger config (SDS §16), so this uses console.info directly, matching
+  // the documented [OTP] dev-delivery convention.
+  console.info(`[OTP] Password reset code for ${email}: ${otp}`);
+}
+
+export async function resetPassword(
+  prisma: PrismaClient,
+  input: ResetPasswordInput,
+  bcryptRounds: number,
+): Promise<void> {
+  const email = input.email.toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  if (!user) {
+    // Timing-safety mirror of loginUser: run a real bcrypt.compare even
+    // though there's nothing to actually check, so response time doesn't
+    // reveal whether the email is registered.
+    await bcrypt.compare(input.otp, getDummyHash(bcryptRounds));
+    throw new AppError(401, ErrorCodes.AUTH_OTP_INVALID, 'Invalid or expired reset code');
+  }
+
+  const otpRow = await prisma.passwordResetOtp.findFirst({
+    where: { userId: user.id, invalidated: false, attemptsLeft: { gt: 0 } },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!otpRow) {
+    await bcrypt.compare(input.otp, getDummyHash(bcryptRounds));
+    throw new AppError(401, ErrorCodes.AUTH_OTP_INVALID, 'Invalid or expired reset code');
+  }
+
+  if (otpRow.expiresAt < new Date()) {
+    // Timing-safety: still run the real compare so an expired-but-otherwise-
+    // valid OTP row doesn't respond measurably faster than the wrong-OTP,
+    // no-active-OTP, or unknown-email branches above.
+    await bcrypt.compare(input.otp, otpRow.otpHash);
+    throw new AppError(401, ErrorCodes.AUTH_OTP_INVALID, 'Invalid or expired reset code');
+  }
+
+  const otpMatches = await bcrypt.compare(input.otp, otpRow.otpHash);
+
+  if (!otpMatches) {
+    // Atomic DB-level decrement (Prisma's `decrement` compiles to a single
+    // `SET "attemptsLeft" = "attemptsLeft" - 1` statement) so concurrent
+    // wrong guesses can't race past the 5-attempt cap via a read-then-write
+    // gap.
+    const updated = await prisma.passwordResetOtp.update({
+      where: { id: otpRow.id },
+      data: { attemptsLeft: { decrement: 1 } },
+    });
+
+    if (updated.attemptsLeft <= 0) {
+      await prisma.passwordResetOtp.update({
+        where: { id: otpRow.id },
+        data: { invalidated: true },
+      });
+    }
+
+    throw new AppError(401, ErrorCodes.AUTH_OTP_INVALID, 'Invalid or expired reset code');
+  }
+
+  const newPasswordHash = await bcrypt.hash(input.newPassword, bcryptRounds);
+  const now = new Date();
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: newPasswordHash },
+    }),
+    prisma.passwordResetOtp.update({
+      where: { id: otpRow.id },
+      data: { invalidated: true },
+    }),
+    // All devices, every familyId - not scoped to any single session, since
+    // this request carries no refresh cookie of its own (FR-AUTH-6).
+    prisma.refreshToken.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: now },
+    }),
+  ]);
 }
