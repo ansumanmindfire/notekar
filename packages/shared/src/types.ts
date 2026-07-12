@@ -60,3 +60,8 @@ export interface Tag {
 export interface TagWithCount extends Tag {
   noteCount: number;
 }
+
+export interface SearchResultItem {
+  note: Note;
+  headline: string;
+}

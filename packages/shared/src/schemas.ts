@@ -119,6 +119,10 @@ export const listNotesQuerySchema = paginationQuerySchema.extend({
   tagIds: tagIdsQuerySchema,
 });
 
+export const searchQuerySchema = paginationQuerySchema.extend({
+  q: z.string().trim().min(1, 'Search query is required'),
+});
+
 export type CreateNoteInput = z.infer<typeof createNoteSchema>;
 export type UpdateNoteInput = z.infer<typeof updateNoteSchema>;
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
@@ -127,3 +131,4 @@ export type ListNotesQuery = z.infer<typeof listNotesQuerySchema>;
 export type TagColor = z.infer<typeof tagColorSchema>;
 export type CreateTagInput = z.infer<typeof createTagSchema>;
 export type UpdateTagInput = z.infer<typeof updateTagSchema>;
+export type SearchQuery = z.infer<typeof searchQuerySchema>;
