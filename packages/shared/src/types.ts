@@ -65,3 +65,27 @@ export interface SearchResultItem {
   note: Note;
   headline: string;
 }
+
+export interface CreatedShareLink {
+  token: string;
+  shareUrl: string;
+  expiresAt: string;
+  viewCount: number;
+}
+
+export interface ShareLink {
+  id: string;
+  token: string;
+  shareUrl: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  viewCount: number;
+  createdAt: string;
+}
+
+export interface PublicShareView {
+  title: string;
+  body: TipTapDocument;
+  viewCount: number;
+  sharedAt: string;
+}

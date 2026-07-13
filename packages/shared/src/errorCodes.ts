@@ -10,6 +10,8 @@ export const ErrorCodes = {
   TAG_NOT_FOUND: 'TAG_NOT_FOUND',
   TAG_NAME_DUPLICATE: 'TAG_NAME_DUPLICATE',
   INVALID_TAG: 'INVALID_TAG',
+  SHARE_NOT_FOUND: 'SHARE_NOT_FOUND',
+  GONE_LINK_INVALID: 'GONE_LINK_INVALID',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
