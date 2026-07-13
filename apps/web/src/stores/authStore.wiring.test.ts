@@ -1,14 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from './authStore';
 
 // This suite intentionally does NOT call `setAuthApi(...)`. It exercises the REAL
 // default `authApi` wiring (task AB-1010/2.3: authStore actions call through
 // `apiClient.ts` against the real endpoints) by mocking the global `fetch` directly,
-// the same way `apiClient.test.ts` does. Each Vitest test file gets its own isolated
-// module registry (default `pool: 'threads'` with `isolate: true`, unmodified in
-// `apps/web/vitest.config.ts`), so the module-level `authApi` variable in
-// `authStore.ts` starts fresh here regardless of what `authStore.test.ts` does with
-// `setAuthApi`.
+// the same way `apiClient.test.ts` does. `apps/web/vitest.config.ts` sets
+// `isolate: false` (to fix worker timeouts), which shares the module registry across
+// test files in a worker - so `authStore.test.ts`'s `setAuthApi(mockApi)` calls must
+// restore the real `authApi` in their own `afterEach`, or this suite would silently
+// exercise a leftover mock instead of the real wiring it's meant to test.
 
 const INITIAL_STATE = {
   accessToken: null,
@@ -39,6 +39,10 @@ describe('authStore real wiring (default authApi, no setAuthApi override)', () =
     );
 
     vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('login() POSTs { email, password } to /auth/login and hydrates the session from the response', async () => {
