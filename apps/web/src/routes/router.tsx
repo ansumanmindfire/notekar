@@ -4,6 +4,9 @@ import { loginRoute } from './login';
 import { registerRoute } from './register';
 import { forgotPasswordRoute } from './forgot-password';
 import { notesRoute } from './notes';
+import { notesTrashRoute } from './notes.trash';
+import { noteDetailRoute } from './notes.$noteId';
+import { noteNewRoute } from './notes.new';
 import { useAuthStore } from '../stores/authStore';
 
 const indexRoute = createRoute({
@@ -21,6 +24,9 @@ const routeTree = rootRoute.addChildren([
   registerRoute,
   forgotPasswordRoute,
   notesRoute,
+  notesTrashRoute,
+  noteDetailRoute,
+  noteNewRoute,
 ]);
 
 export const router = createRouter({ routeTree });
