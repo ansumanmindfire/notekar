@@ -19,4 +19,14 @@ export const UI_COPY = {
     confirm: 'Restore',
     cancel: 'Cancel',
   },
+  AUTOSAVE_SAVING: 'Syncing changes...',
+  AUTOSAVE_SAVED: 'All changes saved',
+  AUTOSAVE_ERROR: 'Sync failed — Retrying...',
+  DELETE_NOTE_CONFIRM: {
+    heading: 'Delete note?',
+    body: 'This note will be moved to Trash. You can restore it within 30 days.',
+    confirm: 'Delete',
+    cancel: 'Cancel',
+  },
+  TAG_CREATE_LABEL: (name: string) => `Create "${name}"`,
 } as const;

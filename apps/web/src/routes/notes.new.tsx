@@ -2,8 +2,8 @@ import { createRoute, redirect } from '@tanstack/react-router';
 import { rootRoute } from './root';
 import { useAuthStore } from '../stores/authStore';
 import { AppShell } from '../components/layout/AppShell';
+import { NoteEditorPage } from '../components/editor/NoteEditorPage';
 
-// Throwaway placeholder - AB-1012 replaces this wholesale with the real note editor.
 export const noteNewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/notes/new',
@@ -14,7 +14,7 @@ export const noteNewRoute = createRoute({
   },
   component: () => (
     <AppShell>
-      <p className="text-sm text-slate-500">Note editor coming soon.</p>
+      <NoteEditorPage mode="new" />
     </AppShell>
   ),
 });

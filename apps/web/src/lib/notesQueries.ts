@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ListNotesParams, ListTrashParams } from './notesApi';
-import { listNotes, listTags, listTrash, restoreNote } from './notesApi';
+import type { CreateNoteParams, CreateTagParams, ListNotesParams, ListTrashParams, UpdateNoteParams } from './notesApi';
+import { createNote, createTag, deleteNote, getNote, listNotes, listTags, listTrash, restoreNote, updateNote } from './notesApi';
 
 export const notesKeys = {
   list: (params: ListNotesParams) => ['notes', 'list', params] as const,
   trash: (params: ListTrashParams) => ['notes', 'trash', params] as const,
+  detail: (noteId: string) => ['notes', 'detail', noteId] as const,
   tags: () => ['tags', 'list'] as const,
 };
 
@@ -32,6 +33,14 @@ export function useTagsQuery() {
   });
 }
 
+export function useNoteQuery(noteId: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: notesKeys.detail(noteId),
+    queryFn: () => getNote(noteId),
+    enabled: options.enabled ?? true,
+  });
+}
+
 export function useRestoreNoteMutation() {
   const queryClient = useQueryClient();
 
@@ -43,6 +52,55 @@ export function useRestoreNoteMutation() {
       // moves from trash to the active list) and the 404 race (stale trash row
       // must disappear on refetch even though the mutation itself failed).
       void queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function useCreateNoteMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (params: CreateNoteParams) => createNote(params),
+    onSuccess: (note) => {
+      // Seed the detail cache with the just-created note so the route transition
+      // to /notes/:id mounts already-populated - no refetch waterfall/content flash.
+      queryClient.setQueryData(notesKeys.detail(note.id), note);
+      void queryClient.invalidateQueries({ queryKey: ['notes', 'list'] });
+    },
+  });
+}
+
+export function useUpdateNoteMutation(noteId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (params: UpdateNoteParams) => updateNote(noteId, params),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: notesKeys.detail(noteId) });
+      void queryClient.invalidateQueries({ queryKey: ['notes', 'list'] });
+    },
+  });
+}
+
+export function useDeleteNoteMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (noteId: string) => deleteNote(noteId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notes', 'list'] });
+      void queryClient.invalidateQueries({ queryKey: ['notes', 'trash'] });
+    },
+  });
+}
+
+export function useCreateTagMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (params: CreateTagParams) => createTag(params),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: notesKeys.tags() });
     },
   });
 }

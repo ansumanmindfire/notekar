@@ -3,21 +3,33 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import type { Note, Page, TagWithCount } from 'shared';
+import { ApiRequestError } from './apiClient';
 
-vi.mock('./notesApi', () => ({
-  listNotes: vi.fn(),
-  listTrash: vi.fn(),
-  listTags: vi.fn(),
-  restoreNote: vi.fn(),
-}));
+vi.mock('./notesApi');
 
-import { listNotes, listTags, listTrash, restoreNote } from './notesApi';
-import { notesKeys, useNotesListQuery, useRestoreNoteMutation, useTagsQuery, useTrashListQuery } from './notesQueries';
+import { createNote, createTag, deleteNote, getNote, listNotes, listTags, listTrash, restoreNote, updateNote } from './notesApi';
+import {
+  notesKeys,
+  useCreateNoteMutation,
+  useCreateTagMutation,
+  useDeleteNoteMutation,
+  useNoteQuery,
+  useNotesListQuery,
+  useRestoreNoteMutation,
+  useTagsQuery,
+  useTrashListQuery,
+  useUpdateNoteMutation,
+} from './notesQueries';
 
 const mockListNotes = vi.mocked(listNotes);
 const mockListTrash = vi.mocked(listTrash);
 const mockListTags = vi.mocked(listTags);
 const mockRestoreNote = vi.mocked(restoreNote);
+const mockGetNote = vi.mocked(getNote);
+const mockCreateNote = vi.mocked(createNote);
+const mockUpdateNote = vi.mocked(updateNote);
+const mockDeleteNote = vi.mocked(deleteNote);
+const mockCreateTag = vi.mocked(createTag);
 
 function emptyPage<T>(): Page<T> {
   return { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0 };
@@ -49,6 +61,10 @@ describe('notesKeys', () => {
 
   it('tags() produces the expected key shape', () => {
     expect(notesKeys.tags()).toEqual(['tags', 'list']);
+  });
+
+  it('detail() produces the expected key shape', () => {
+    expect(notesKeys.detail('note-1')).toEqual(['notes', 'detail', 'note-1']);
   });
 });
 
@@ -139,5 +155,113 @@ describe('useRestoreNoteMutation', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes'] });
+  });
+});
+
+describe('useNoteQuery', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls getNote with the given id and resolves with the returned note', async () => {
+    const note = { id: 'note-1', title: 'Hello' } as Note;
+    mockGetNote.mockResolvedValueOnce(note);
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useNoteQuery('note-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGetNote).toHaveBeenCalledWith('note-1');
+    expect(result.current.data).toEqual(note);
+  });
+});
+
+describe('useCreateNoteMutation', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('seeds the detail cache with the created note and invalidates the notes list on success', async () => {
+    const note = { id: 'note-1', title: 'Hello' } as Note;
+    mockCreateNote.mockResolvedValueOnce(note);
+    const { queryClient, wrapper } = createWrapper();
+    const setQueryDataSpy = vi.spyOn(queryClient, 'setQueryData');
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useCreateNoteMutation(), { wrapper });
+    result.current.mutate({ title: 'Hello', body: {} });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(setQueryDataSpy).toHaveBeenCalledWith(['notes', 'detail', 'note-1'], note);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes', 'list'] });
+  });
+});
+
+describe('useUpdateNoteMutation', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('invalidates the detail and list keys on success', async () => {
+    mockUpdateNote.mockResolvedValueOnce({ id: 'note-1' } as Note);
+    const { queryClient, wrapper } = createWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useUpdateNoteMutation('note-1'), { wrapper });
+    result.current.mutate({ title: 'Updated' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockUpdateNote).toHaveBeenCalledWith('note-1', { title: 'Updated' });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes', 'detail', 'note-1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes', 'list'] });
+  });
+});
+
+describe('useDeleteNoteMutation', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('invalidates the list and trash keys on success', async () => {
+    mockDeleteNote.mockResolvedValueOnce(undefined);
+    const { queryClient, wrapper } = createWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useDeleteNoteMutation(), { wrapper });
+    result.current.mutate('note-1');
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockDeleteNote).toHaveBeenCalledWith('note-1');
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes', 'list'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes', 'trash'] });
+  });
+});
+
+describe('useCreateTagMutation', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('invalidates the tags list on success', async () => {
+    mockCreateTag.mockResolvedValueOnce({ id: 'tag-1', name: 'Work', color: 'blue' });
+    const { queryClient, wrapper } = createWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useCreateTagMutation(), { wrapper });
+    result.current.mutate({ name: 'Work', color: 'blue' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['tags', 'list'] });
+  });
+
+  it('surfaces a 409 TAG_NAME_DUPLICATE rejection as an error without invalidating', async () => {
+    mockCreateTag.mockRejectedValueOnce(new ApiRequestError({ code: 'TAG_NAME_DUPLICATE', message: 'dup' }));
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useCreateTagMutation(), { wrapper });
+    result.current.mutate({ name: 'Work', color: 'blue' });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect((result.current.error as ApiRequestError).code).toBe('TAG_NAME_DUPLICATE');
   });
 });

@@ -1,4 +1,4 @@
-import type { Note, NoteSort, Page, TagWithCount } from 'shared';
+import type { Note, NoteSort, Page, Tag, TagColor, TipTapDocument, TagWithCount } from 'shared';
 import { apiRequest } from './apiClient';
 
 export interface ListNotesParams {
@@ -56,4 +56,37 @@ export function restoreNote(id: string): Promise<Note> {
 // both with the real editor/renderer.
 export function getNote(id: string): Promise<Note> {
   return apiRequest<Note>(`/notes/${id}`);
+}
+
+export interface CreateNoteParams {
+  title: string;
+  body: TipTapDocument;
+  tagIds?: string[];
+}
+
+export interface UpdateNoteParams {
+  title?: string;
+  body?: TipTapDocument;
+  tagIds?: string[];
+}
+
+export function createNote(params: CreateNoteParams): Promise<Note> {
+  return apiRequest<Note>('/notes', { method: 'POST', body: params });
+}
+
+export function updateNote(id: string, params: UpdateNoteParams): Promise<Note> {
+  return apiRequest<Note>(`/notes/${id}`, { method: 'PATCH', body: params });
+}
+
+export function deleteNote(id: string): Promise<void> {
+  return apiRequest<void>(`/notes/${id}`, { method: 'DELETE' });
+}
+
+export interface CreateTagParams {
+  name: string;
+  color: TagColor;
+}
+
+export function createTag(params: CreateTagParams): Promise<Tag> {
+  return apiRequest<Tag>('/tags', { method: 'POST', body: params });
 }

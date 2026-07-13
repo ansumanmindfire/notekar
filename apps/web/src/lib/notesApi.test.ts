@@ -1,6 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from './apiClient';
-import { listNotes, listTags, listTrash, restoreNote } from './notesApi';
+import {
+  createNote,
+  createTag,
+  deleteNote,
+  listNotes,
+  listTags,
+  listTrash,
+  restoreNote,
+  updateNote,
+} from './notesApi';
 
 vi.mock('./apiClient', () => ({
   apiRequest: vi.fn(),
@@ -9,6 +18,10 @@ vi.mock('./apiClient', () => ({
 describe('notesApi', () => {
   beforeEach(() => {
     vi.mocked(apiRequest).mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   describe('listNotes', () => {
@@ -95,6 +108,55 @@ describe('notesApi', () => {
 
       expect(apiRequest).toHaveBeenCalledTimes(1);
       expect(apiRequest).toHaveBeenCalledWith('/notes/note-1/restore', { method: 'POST' });
+    });
+  });
+
+  describe('createNote', () => {
+    it('POSTs to /notes with title, body, and tagIds', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce({ id: 'note-1' } as never);
+      const params = { title: 'Hello', body: {}, tagIds: ['tag-1'] };
+
+      await createNote(params);
+
+      expect(apiRequest).toHaveBeenCalledTimes(1);
+      expect(apiRequest).toHaveBeenCalledWith('/notes', { method: 'POST', body: params });
+    });
+  });
+
+  describe('updateNote', () => {
+    it('PATCHes to /notes/{id} with only the provided fields', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce({ id: 'note-1' } as never);
+
+      await updateNote('note-1', { title: 'Updated' });
+
+      expect(apiRequest).toHaveBeenCalledTimes(1);
+      expect(apiRequest).toHaveBeenCalledWith('/notes/note-1', {
+        method: 'PATCH',
+        body: { title: 'Updated' },
+      });
+    });
+  });
+
+  describe('deleteNote', () => {
+    it('DELETEs /notes/{id} with no body', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce(undefined as never);
+
+      await deleteNote('note-1');
+
+      expect(apiRequest).toHaveBeenCalledTimes(1);
+      expect(apiRequest).toHaveBeenCalledWith('/notes/note-1', { method: 'DELETE' });
+    });
+  });
+
+  describe('createTag', () => {
+    it('POSTs to /tags with name and color', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce({ id: 'tag-1' } as never);
+      const params = { name: 'Work', color: 'blue' as const };
+
+      await createTag(params);
+
+      expect(apiRequest).toHaveBeenCalledTimes(1);
+      expect(apiRequest).toHaveBeenCalledWith('/tags', { method: 'POST', body: params });
     });
   });
 });
