@@ -2,6 +2,7 @@ import { createApp } from './app';
 import { loadEnv, EnvValidationError, type Env } from './lib/env';
 import { logger } from './lib/logger';
 import { schedulePurgeNotesJob } from './lib/jobs/purgeNotes';
+import { schedulePurgeVersionsJob } from './lib/jobs/purgeVersions';
 
 let env: Env;
 try {
@@ -25,4 +26,5 @@ app.listen(env.PORT, () => {
 // future test importing it directly still can't start a background cron.
 if (env.NODE_ENV !== 'test') {
   schedulePurgeNotesJob(env);
+  schedulePurgeVersionsJob(env);
 }
