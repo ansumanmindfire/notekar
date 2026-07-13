@@ -16,6 +16,7 @@ import {
   updateTagSchema,
   tagIdsQuerySchema,
   searchQuerySchema,
+  createShareLinkSchema,
 } from './schemas';
 
 describe('registerSchema', () => {
@@ -938,6 +939,52 @@ describe('searchQuerySchema', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues.some((issue) => issue.path[0] === 'pageSize')).toBe(true);
+    }
+  });
+});
+
+describe('createShareLinkSchema', () => {
+  it('accepts a valid ISO 8601 UTC datetime string (Z-suffixed) for expiresAt', () => {
+    const result = createShareLinkSchema.safeParse({
+      expiresAt: '2026-07-12T00:00:00Z',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.expiresAt).toBe('2026-07-12T00:00:00Z');
+    }
+  });
+
+  it('accepts expiresAt omitted entirely (optional)', () => {
+    const result = createShareLinkSchema.safeParse({});
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.expiresAt).toBeUndefined();
+    }
+  });
+
+  it('rejects a malformed datetime string', () => {
+    const result = createShareLinkSchema.safeParse({
+      expiresAt: 'not-a-date',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'expiresAt')).toBe(true);
+    }
+  });
+
+  // z.string().datetime() requires a UTC 'Z' suffix or explicit offset by
+  // default - an otherwise well-formed ISO string lacking it is rejected.
+  it('rejects an ISO datetime string missing the Z/offset suffix', () => {
+    const result = createShareLinkSchema.safeParse({
+      expiresAt: '2026-07-12T00:00:00',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'expiresAt')).toBe(true);
     }
   });
 });
