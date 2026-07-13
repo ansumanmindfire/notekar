@@ -57,6 +57,13 @@ vi.mock('../lib/notesApi', () => {
     listTrash: vi.fn().mockResolvedValue(emptyNotesPage),
     getNote: vi.fn().mockResolvedValue(fixtureNote),
     restoreNote: vi.fn().mockResolvedValue(fixtureNote),
+    // AB-1012 - NoteEditorPage/TagCombobox/DeleteNoteModal/useAutosave import
+    // these, but no guard test here simulates typing/clicking, so they're never
+    // actually invoked - stubbed only so the mocked module shape matches.
+    createNote: vi.fn(),
+    updateNote: vi.fn(),
+    deleteNote: vi.fn(),
+    createTag: vi.fn(),
   };
 });
 
@@ -190,14 +197,14 @@ describe('router route guards', () => {
       const testRouter = await renderAt('/notes/abc123');
 
       expect(testRouter.state.location.pathname).toBe('/notes/abc123');
-      expect(await screen.findByRole('heading', { name: 'Guard Test Note' })).toBeInTheDocument();
+      expect(await screen.findByDisplayValue('Guard Test Note')).toBeInTheDocument();
     });
 
     it('stays on /notes/new (no redirect)', async () => {
       const testRouter = await renderAt('/notes/new');
 
       expect(testRouter.state.location.pathname).toBe('/notes/new');
-      expect(await screen.findByText('Note editor coming soon.')).toBeInTheDocument();
+      expect(await screen.findByLabelText('Title')).toHaveValue('');
     });
 
     it('lands on /notes when navigating to /', async () => {
