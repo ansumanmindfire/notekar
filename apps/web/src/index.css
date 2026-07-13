@@ -13,3 +13,52 @@
 body {
   @apply bg-slate-50 text-slate-900 min-h-screen antialiased;
 }
+
+.ProseMirror {
+  outline: none;
+  min-height: 200px;
+}
+
+.ProseMirror h1 {
+  @apply text-2xl font-bold;
+}
+
+.ProseMirror h2 {
+  @apply text-xl font-bold;
+}
+
+.ProseMirror h3 {
+  @apply text-lg font-bold;
+}
+
+.ProseMirror ul {
+  @apply list-disc pl-6;
+}
+
+.ProseMirror ol {
+  @apply list-decimal pl-6;
+}
+
+.ProseMirror blockquote {
+  @apply border-l-4 border-slate-300 pl-4 text-slate-600 italic;
+}
+
+.ProseMirror pre {
+  @apply rounded-lg bg-slate-900 p-3 text-sm text-slate-50;
+}
+
+.ProseMirror pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
+
+.ProseMirror p,
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror ul,
+.ProseMirror ol,
+.ProseMirror blockquote,
+.ProseMirror pre {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
