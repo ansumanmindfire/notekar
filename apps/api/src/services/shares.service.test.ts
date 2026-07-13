@@ -158,9 +158,14 @@ describe('shares.service', () => {
       });
     });
 
-    it('rejects an expiresAt at now + 30 days + 1ms (just past the upper boundary) with 400 VALIDATION_FAILED', async () => {
+    it('rejects an expiresAt just past the upper boundary with 400 VALIDATION_FAILED', async () => {
       prisma.note.findFirst.mockResolvedValue(baseNote());
-      const justOverThirtyDays = new Date(Date.now() + 30 * DAY_MS + 1);
+      // A 1ms margin is indistinguishable from real elapsed time between this
+      // line and the service's own `Date.now()` call, which erodes the delta
+      // below the boundary and makes the assertion flaky. 5s is comfortably
+      // past any realistic test-execution jitter while still well within the
+      // same boundary-testing intent.
+      const justOverThirtyDays = new Date(Date.now() + 30 * DAY_MS + 5000);
       const input: CreateShareLinkInput = { expiresAt: justOverThirtyDays.toISOString() };
 
       let caught: unknown;
