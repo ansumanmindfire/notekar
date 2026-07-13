@@ -12,6 +12,7 @@ export const ErrorCodes = {
   INVALID_TAG: 'INVALID_TAG',
   SHARE_NOT_FOUND: 'SHARE_NOT_FOUND',
   GONE_LINK_INVALID: 'GONE_LINK_INVALID',
+  VERSION_NOT_FOUND: 'VERSION_NOT_FOUND',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
