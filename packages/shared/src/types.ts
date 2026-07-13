@@ -51,6 +51,17 @@ export interface Note {
   deletedAt: string | null;
 }
 
+export interface NoteVersionSummary {
+  id: string;
+  version: number;
+  title: string;
+  savedAt: string;
+}
+
+export interface NoteVersionDetail extends NoteVersionSummary {
+  body: TipTapDocument;
+}
+
 export interface Tag {
   id: string;
   name: string;

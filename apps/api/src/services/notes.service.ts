@@ -18,11 +18,11 @@ const SORT_ORDER_BY: Record<NoteSort, Prisma.NoteOrderByWithRelationInput> = {
   'updatedAt:desc': { updatedAt: 'desc' },
 };
 
-const TAGS_INCLUDE = { tags: { select: { tagId: true } } } as const;
+export const TAGS_INCLUDE = { tags: { select: { tagId: true } } } as const;
 
 export type NoteWithTags = Note & { tags: { tagId: string }[] };
 
-function notFound(): AppError {
+export function notFound(): AppError {
   return new AppError(404, ErrorCodes.NOTE_NOT_FOUND, 'Note not found');
 }
 

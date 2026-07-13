@@ -3,6 +3,7 @@ import type { Env } from '../lib/env';
 import { requireAuth } from '../middleware/auth';
 import { createNotesController } from '../controllers/notes.controller';
 import { createSharesRouter } from './shares.router';
+import { createVersionsRouter } from './versions.router';
 
 export type NotesRouterEnv = Pick<Env, 'JWT_SECRET' | 'WEB_ORIGIN'>;
 
@@ -21,9 +22,11 @@ export function createNotesRouter(env: NotesRouterEnv): Router {
   router.patch('/:id', controller.update);
   router.delete('/:id', controller.remove);
   router.post('/:id/restore', controller.restore);
-  // requireAuth above already ran by the time requests reach this nested
-  // router - shares.router.ts does not (and must not) call it again.
+  // requireAuth above already ran by the time requests reach these nested
+  // routers - shares.router.ts/versions.router.ts do not (and must not) call
+  // it again.
   router.use('/:id/shares', createSharesRouter(env));
+  router.use('/:id/versions', createVersionsRouter());
 
   return router;
 }

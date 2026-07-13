@@ -1,0 +1,197 @@
+openapi: 3.0.3
+info:
+  title: NoteApp API — AB-1009 delta (Version History Architecture)
+  version: 1.0.0
+  description: >
+    Additive delta: GET/POST under /notes/{id}/versions (owner-facing,
+    authenticated). No changes to any existing endpoint.
+
+paths:
+  /notes/{id}/versions:
+    get:
+      summary: List a note's historical versions (owner only), newest first, no body content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Version summaries, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NoteVersionSummary'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Note missing or unowned (trash state does not matter)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /notes/{id}/versions/{versionId}:
+    get:
+      summary: Preview one historical version's full content (owner only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Full historical version content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteVersionDetail'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Note or version missing/unowned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /notes/{id}/versions/{versionId}/restore:
+    post:
+      summary: Restore a note's title/body to a historical version (non-destructive; tags untouched)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Note reverted to the historical version's title/body; a new version snapshot was created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Note or version missing/unowned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    NoteVersionSummary:
+      type: object
+      required: [id, version, title, savedAt]
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        title:
+          type: string
+        savedAt:
+          type: string
+          format: date-time
+
+    NoteVersionDetail:
+      type: object
+      required: [id, version, title, body, savedAt]
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        title:
+          type: string
+        body:
+          type: object
+          description: TipTap JSON document — must be sanitized with DOMPurify before rendering (AGENTS.md §11).
+        savedAt:
+          type: string
+          format: date-time
+
+    Note:
+      type: object
+      required: [id, title, body, tagIds, version, createdAt, updatedAt, deletedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: object
+        tagIds:
+          type: array
+          items:
+            type: string
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - AUTH_TOKEN_INVALID
+            - NOTE_NOT_FOUND
+            - VERSION_NOT_FOUND
+        message:
+          type: string
+        fields:
+          type: array
+          items:
+            type: string
