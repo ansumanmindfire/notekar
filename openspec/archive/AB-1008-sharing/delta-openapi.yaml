@@ -1,0 +1,236 @@
+openapi: 3.0.3
+info:
+  title: NoteApp API — AB-1008 delta (Sharing Architecture)
+  version: 1.0.0
+  description: >
+    Additive delta: POST/DELETE/GET under /notes/{id}/shares (owner-facing,
+    authenticated) and GET /public/shares/{token} (unauthenticated, public
+    read + atomic view-count increment). No changes to any existing endpoint.
+
+paths:
+  /notes/{id}/shares:
+    post:
+      summary: Create a public share link for one of the caller's own active notes
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShareLinkInput'
+      responses:
+        '201':
+          description: Share link created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedShareLink'
+        '400':
+          description: expiresAt malformed or outside the 1-30 day range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Note missing, unowned, or soft-deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    get:
+      summary: List all share links ever created for a note (owner only, includes revoked)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Share links, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShareLink'
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Note missing or unowned (trash state does not matter)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /notes/{id}/shares/{token}:
+    delete:
+      summary: Revoke a share link (idempotent)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Revoked (or was already revoked)
+        '401':
+          description: Missing or invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Token doesn't exist for this note/owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /public/shares/{token}:
+    get:
+      summary: Publicly view a shared note (unauthenticated); atomically increments view count
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Note content for public viewing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicShareView'
+        '410':
+          description: Link revoked, expired, missing, or parent note soft-deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limit exceeded for this IP+token pair (60/min)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CreateShareLinkInput:
+      type: object
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+          description: >
+            Optional. Must be between now and 30 days from now, inclusive.
+            Defaults to now + 7 days if omitted.
+
+    CreatedShareLink:
+      type: object
+      required: [token, shareUrl, expiresAt, viewCount]
+      properties:
+        token:
+          type: string
+        shareUrl:
+          type: string
+          description: '${WEB_ORIGIN}/shares/{token}'
+        expiresAt:
+          type: string
+          format: date-time
+        viewCount:
+          type: integer
+
+    ShareLink:
+      type: object
+      required: [id, token, shareUrl, expiresAt, revokedAt, viewCount, createdAt]
+      properties:
+        id:
+          type: string
+        token:
+          type: string
+        shareUrl:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        viewCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    PublicShareView:
+      type: object
+      required: [title, body, viewCount, sharedAt]
+      properties:
+        title:
+          type: string
+        body:
+          type: object
+          description: TipTap JSON document — must be sanitized with DOMPurify before rendering (AGENTS.md §11).
+        viewCount:
+          type: integer
+        sharedAt:
+          type: string
+          format: date-time
+          description: The share link's createdAt.
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - AUTH_TOKEN_INVALID
+            - NOTE_NOT_FOUND
+            - SHARE_NOT_FOUND
+            - GONE_LINK_INVALID
+            - RATE_LIMITED
+        message:
+          type: string
+        fields:
+          type: array
+          items:
+            type: string

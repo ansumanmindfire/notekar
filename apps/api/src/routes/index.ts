@@ -1,17 +1,22 @@
 import { Router } from 'express';
 import type { ApiError } from 'shared/types';
+import type { Env } from '../lib/env';
 import { createAuthRouter, type AuthRouterEnv } from './auth.router';
 import { createNotesRouter } from './notes.router';
 import { createTagsRouter } from './tags.router';
 import { createSearchRouter } from './search.router';
+import { createPublicRouter } from './public.router';
 
-export function createRouter(env: AuthRouterEnv): Router {
+export type RouterEnv = AuthRouterEnv & Pick<Env, 'WEB_ORIGIN'>;
+
+export function createRouter(env: RouterEnv): Router {
   const router = Router();
 
   router.use('/auth', createAuthRouter(env));
   router.use('/notes', createNotesRouter(env));
   router.use('/tags', createTagsRouter(env));
   router.use('/search', createSearchRouter(env));
+  router.use('/public/shares', createPublicRouter());
 
   router.use((req, res) => {
     const body: ApiError = {

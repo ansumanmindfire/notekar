@@ -123,6 +123,12 @@ export const searchQuerySchema = paginationQuerySchema.extend({
   q: z.string().trim().min(1, 'Search query is required'),
 });
 
+// Format validation only. The 1-30-day range check depends on `now()` at
+// request time, so it lives in shares.service.ts rather than here.
+export const createShareLinkSchema = z.object({
+  expiresAt: z.iso.datetime().optional(),
+});
+
 export type CreateNoteInput = z.infer<typeof createNoteSchema>;
 export type UpdateNoteInput = z.infer<typeof updateNoteSchema>;
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
@@ -132,3 +138,4 @@ export type TagColor = z.infer<typeof tagColorSchema>;
 export type CreateTagInput = z.infer<typeof createTagSchema>;
 export type UpdateTagInput = z.infer<typeof updateTagSchema>;
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
+export type CreateShareLinkInput = z.infer<typeof createShareLinkSchema>;

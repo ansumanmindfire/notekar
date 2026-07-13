@@ -59,18 +59,26 @@ model Note {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
+  // Declared as Unsupported so Prisma's migration diff engine knows this
+  // column exists (added via raw SQL, see the note_search_vector migration)
+  // and never proposes dropping it as drift. Never read/written through the
+  // Prisma client - queried exclusively via $queryRaw in search.service.ts.
+  searchVector Unsupported("tsvector")?
 
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   versions NoteVersion[]
   tags     NoteTag[]
+  shares   ShareLink[]
 
   @@index([userId, deletedAt])
   @@index([userId, createdAt])
   @@index([userId, updatedAt])
 }
 // Full-text search column added via a raw SQL migration (see
-// prisma/migrations/*_note_search_vector), not declared as a Prisma field
-// since Prisma cannot model a STORED generated column:
+// prisma/migrations/*_note_search_vector). Prisma cannot model the STORED
+// generated expression itself, so the column is declared above as
+// Unsupported("tsvector") purely to prevent migration drift - the
+// GENERATED ALWAYS AS (...) STORED clause lives only in that migration's SQL:
 //   ALTER TABLE "Note" ADD COLUMN "searchVector" tsvector
 //     GENERATED ALWAYS AS (to_tsvector('english', coalesce(title,'') || ' ' || coalesce("bodyText",''))) STORED;
 //   CREATE INDEX "note_search_idx" ON "Note" USING GIN ("searchVector");
@@ -87,6 +95,20 @@ model NoteVersion {
 
   @@index([noteId, version])
   @@index([savedAt])
+}
+
+model ShareLink {
+  id        String    @id @default(cuid())
+  noteId    String
+  token     String    @unique // 32-char URL-safe, generated via crypto.randomBytes
+  expiresAt DateTime
+  revokedAt DateTime?
+  viewCount Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId])
 }
 
 model Tag {
