@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, Link } from '@tanstack/react-router';
 import { registerSchema } from 'shared';
 import { useAuthStore } from '../stores/authStore';
 import { ApiRequestError } from '../lib/apiClient';
@@ -67,62 +67,87 @@ export function RegisterForm() {
   }
 
   return (
-    <form onSubmit={(event) => void handleSubmit(event)} noValidate>
-      <h1>Create account</h1>
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md p-8 rounded-2xl bg-white border border-slate-200 shadow-xl">
+        <form onSubmit={(event) => void handleSubmit(event)} noValidate className="space-y-6">
+          <h1 className="text-3xl font-bold text-slate-900 text-center mb-8">Create account</h1>
 
-      {formError && <p role="alert">{formError}</p>}
+          {formError && (
+            <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm" role="alert">
+              {formError}
+            </div>
+          )}
 
-      <label htmlFor="register-email">Email</label>
-      <input
-        id="register-email"
-        name="email"
-        type="email"
-        autoComplete="email"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-        aria-describedby={fieldErrors.email ? 'register-email-error' : undefined}
-      />
-      {fieldErrors.email && (
-        <p id="register-email-error" role="alert">
-          {fieldErrors.email}
-        </p>
-      )}
+          <div className="space-y-2">
+            <label htmlFor="register-email" className="block text-sm font-medium text-slate-700">Email</label>
+            <input
+              id="register-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              aria-describedby={fieldErrors.email ? 'register-email-error' : undefined}
+              className="w-full bg-slate-50 border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 rounded-lg px-4 py-2.5 transition-colors"
+            />
+            {fieldErrors.email && (
+              <p id="register-email-error" className="text-sm text-red-600 mt-1" role="alert">
+                {fieldErrors.email}
+              </p>
+            )}
+          </div>
 
-      <label htmlFor="register-password">Password</label>
-      <input
-        id="register-password"
-        name="password"
-        type="password"
-        autoComplete="new-password"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        aria-describedby={fieldErrors.password ? 'register-password-error' : undefined}
-      />
-      {fieldErrors.password && (
-        <p id="register-password-error" role="alert">
-          {fieldErrors.password}
-        </p>
-      )}
+          <div className="space-y-2">
+            <label htmlFor="register-password" className="block text-sm font-medium text-slate-700">Password</label>
+            <input
+              id="register-password"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              aria-describedby={fieldErrors.password ? 'register-password-error' : undefined}
+              className="w-full bg-slate-50 border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 rounded-lg px-4 py-2.5 transition-colors"
+            />
+            {fieldErrors.password && (
+              <p id="register-password-error" className="text-sm text-red-600 mt-1" role="alert">
+                {fieldErrors.password}
+              </p>
+            )}
+          </div>
 
-      <label htmlFor="register-confirm-password">Confirm password</label>
-      <input
-        id="register-confirm-password"
-        name="confirmPassword"
-        type="password"
-        autoComplete="new-password"
-        value={confirmPassword}
-        onChange={(event) => setConfirmPassword(event.target.value)}
-        aria-describedby={fieldErrors.confirmPassword ? 'register-confirm-password-error' : undefined}
-      />
-      {fieldErrors.confirmPassword && (
-        <p id="register-confirm-password-error" role="alert">
-          {fieldErrors.confirmPassword}
-        </p>
-      )}
+          <div className="space-y-2">
+            <label htmlFor="register-confirm-password" className="block text-sm font-medium text-slate-700">Confirm password</label>
+            <input
+              id="register-confirm-password"
+              name="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              aria-describedby={fieldErrors.confirmPassword ? 'register-confirm-password-error' : undefined}
+              className="w-full bg-slate-50 border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 rounded-lg px-4 py-2.5 transition-colors"
+            />
+            {fieldErrors.confirmPassword && (
+              <p id="register-confirm-password-error" className="text-sm text-red-600 mt-1" role="alert">
+                {fieldErrors.confirmPassword}
+              </p>
+            )}
+          </div>
 
-      <button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? 'Creating account…' : 'Create account'}
-      </button>
-    </form>
+          <button 
+            type="submit" 
+            disabled={isSubmitting}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+          >
+            {isSubmitting ? 'Creating account…' : 'Create account'}
+          </button>
+        </form>
+
+        <div className="mt-8 text-center text-sm text-slate-600">
+          Already have an account? <Link to="/login" className="text-indigo-600 hover:text-indigo-500 font-medium">Log in</Link>
+        </div>
+      </div>
+    </div>
   );
 }

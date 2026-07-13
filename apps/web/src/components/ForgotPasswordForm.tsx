@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, Link } from '@tanstack/react-router';
 import { forgotPasswordSchema, resetPasswordSchema } from 'shared';
 import type { ForgotPasswordResponse } from 'shared';
 import { apiRequest, ApiRequestError } from '../lib/apiClient';
@@ -96,95 +96,143 @@ export function ForgotPasswordForm() {
 
   if (step === 'request') {
     return (
-      <form onSubmit={(event) => void handleRequestSubmit(event)} noValidate>
-        <h1>Forgot password</h1>
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-md p-8 rounded-2xl bg-white border border-slate-200 shadow-xl">
+          <form onSubmit={(event) => void handleRequestSubmit(event)} noValidate className="space-y-6">
+            <h1 className="text-3xl font-bold text-slate-900 text-center mb-8">Forgot password</h1>
 
-        {formError && <p role="alert">{formError}</p>}
+            {formError && (
+              <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm" role="alert">
+                {formError}
+              </div>
+            )}
 
-        <label htmlFor="forgot-password-email">Email</label>
-        <input
-          id="forgot-password-email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          aria-describedby={fieldErrors.email ? 'forgot-password-email-error' : undefined}
-        />
-        {fieldErrors.email && (
-          <p id="forgot-password-email-error" role="alert">
-            {fieldErrors.email}
-          </p>
-        )}
+            <div className="space-y-2">
+              <label htmlFor="forgot-password-email" className="block text-sm font-medium text-slate-700">Email</label>
+              <input
+                id="forgot-password-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                aria-describedby={fieldErrors.email ? 'forgot-password-email-error' : undefined}
+                className="w-full bg-slate-50 border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 rounded-lg px-4 py-2.5 transition-colors"
+              />
+              {fieldErrors.email && (
+                <p id="forgot-password-email-error" className="text-sm text-red-600 mt-1" role="alert">
+                  {fieldErrors.email}
+                </p>
+              )}
+            </div>
 
-        <button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Sending…' : 'Send reset code'}
-        </button>
-      </form>
+            <button 
+              type="submit" 
+              disabled={isSubmitting}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+            >
+              {isSubmitting ? 'Sending…' : 'Send reset code'}
+            </button>
+          </form>
+
+          <div className="mt-8 text-center text-sm text-slate-600">
+            Remember your password? <Link to="/login" className="text-indigo-600 hover:text-indigo-500 font-medium">Log in</Link>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <form onSubmit={(event) => void handleVerifySubmit(event)} noValidate>
-      <h1>Enter reset code</h1>
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md p-8 rounded-2xl bg-white border border-slate-200 shadow-xl">
+        <form onSubmit={(event) => void handleVerifySubmit(event)} noValidate className="space-y-6">
+          <h1 className="text-3xl font-bold text-slate-900 text-center mb-8">Enter reset code</h1>
 
-      {infoMessage && <p role="status">{infoMessage}</p>}
-      {formError && <p role="alert">{formError}</p>}
+          {infoMessage && (
+            <div className="p-4 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-600 text-sm" role="status">
+              {infoMessage}
+            </div>
+          )}
+          {formError && (
+            <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm" role="alert">
+              {formError}
+            </div>
+          )}
 
-      <label htmlFor="reset-otp">6-digit code</label>
-      <input
-        id="reset-otp"
-        name="otp"
-        type="text"
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        value={otp}
-        onChange={(event) => setOtp(event.target.value)}
-        aria-describedby={fieldErrors.otp ? 'reset-otp-error' : undefined}
-      />
-      {fieldErrors.otp && (
-        <p id="reset-otp-error" role="alert">
-          {fieldErrors.otp}
-        </p>
-      )}
+          <div className="space-y-2">
+            <label htmlFor="reset-otp" className="block text-sm font-medium text-slate-700">6-digit code</label>
+            <input
+              id="reset-otp"
+              name="otp"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value)}
+              aria-describedby={fieldErrors.otp ? 'reset-otp-error' : undefined}
+              className="w-full bg-slate-50 border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 rounded-lg px-4 py-2.5 transition-colors"
+            />
+            {fieldErrors.otp && (
+              <p id="reset-otp-error" className="text-sm text-red-600 mt-1" role="alert">
+                {fieldErrors.otp}
+              </p>
+            )}
+          </div>
 
-      <label htmlFor="reset-new-password">New password</label>
-      <input
-        id="reset-new-password"
-        name="newPassword"
-        type="password"
-        autoComplete="new-password"
-        value={newPassword}
-        onChange={(event) => setNewPassword(event.target.value)}
-        aria-describedby={fieldErrors.newPassword ? 'reset-new-password-error' : undefined}
-      />
-      {fieldErrors.newPassword && (
-        <p id="reset-new-password-error" role="alert">
-          {fieldErrors.newPassword}
-        </p>
-      )}
+          <div className="space-y-2">
+            <label htmlFor="reset-new-password" className="block text-sm font-medium text-slate-700">New password</label>
+            <input
+              id="reset-new-password"
+              name="newPassword"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              aria-describedby={fieldErrors.newPassword ? 'reset-new-password-error' : undefined}
+              className="w-full bg-slate-50 border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 rounded-lg px-4 py-2.5 transition-colors"
+            />
+            {fieldErrors.newPassword && (
+              <p id="reset-new-password-error" className="text-sm text-red-600 mt-1" role="alert">
+                {fieldErrors.newPassword}
+              </p>
+            )}
+          </div>
 
-      <label htmlFor="reset-confirm-new-password">Confirm new password</label>
-      <input
-        id="reset-confirm-new-password"
-        name="confirmNewPassword"
-        type="password"
-        autoComplete="new-password"
-        value={confirmNewPassword}
-        onChange={(event) => setConfirmNewPassword(event.target.value)}
-        aria-describedby={
-          fieldErrors.confirmNewPassword ? 'reset-confirm-new-password-error' : undefined
-        }
-      />
-      {fieldErrors.confirmNewPassword && (
-        <p id="reset-confirm-new-password-error" role="alert">
-          {fieldErrors.confirmNewPassword}
-        </p>
-      )}
+          <div className="space-y-2">
+            <label htmlFor="reset-confirm-new-password" className="block text-sm font-medium text-slate-700">Confirm new password</label>
+            <input
+              id="reset-confirm-new-password"
+              name="confirmNewPassword"
+              type="password"
+              autoComplete="new-password"
+              value={confirmNewPassword}
+              onChange={(event) => setConfirmNewPassword(event.target.value)}
+              aria-describedby={
+                fieldErrors.confirmNewPassword ? 'reset-confirm-new-password-error' : undefined
+              }
+              className="w-full bg-slate-50 border border-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 rounded-lg px-4 py-2.5 transition-colors"
+            />
+            {fieldErrors.confirmNewPassword && (
+              <p id="reset-confirm-new-password-error" className="text-sm text-red-600 mt-1" role="alert">
+                {fieldErrors.confirmNewPassword}
+              </p>
+            )}
+          </div>
 
-      <button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? 'Resetting…' : 'Reset password'}
-      </button>
-    </form>
+          <button 
+            type="submit" 
+            disabled={isSubmitting}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+          >
+            {isSubmitting ? 'Resetting…' : 'Reset password'}
+          </button>
+        </form>
+
+        <div className="mt-8 text-center text-sm text-slate-600">
+          Remember your password? <Link to="/login" className="text-indigo-600 hover:text-indigo-500 font-medium">Log in</Link>
+        </div>
+      </div>
+    </div>
   );
 }

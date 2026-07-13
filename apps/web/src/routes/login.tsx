@@ -1,7 +1,9 @@
-import { createRoute, redirect } from '@tanstack/react-router';
+import { createRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { rootRoute } from './root';
 import { useAuthStore } from '../stores/authStore';
 import { LoginForm } from '../components/LoginForm';
+import { useEffect } from 'react';
+import { toast } from 'sonner';
 
 type LoginNotice = 'account-created' | 'password-reset';
 
@@ -34,11 +36,14 @@ export const loginRoute = createRoute({
 
 function LoginRouteComponent() {
   const { notice } = loginRoute.useSearch();
+  const navigate = useNavigate();
 
-  return (
-    <>
-      {notice && <p role="status">{NOTICE_COPY[notice]}</p>}
-      <LoginForm />
-    </>
-  );
+  useEffect(() => {
+    if (notice) {
+      toast.success(NOTICE_COPY[notice], { id: notice });
+      void navigate({ to: '/login', replace: true });
+    }
+  }, [notice, navigate]);
+
+  return <LoginForm />;
 }

@@ -10,24 +10,27 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "shared": "workspace:*",
+    "@tanstack/react-query": "5.101.2",
+    "@tanstack/react-router": "1.170.17",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "zustand": "5.0.14",
-    "@tanstack/react-query": "5.101.2",
-    "@tanstack/react-router": "1.170.17"
+    "shared": "workspace:*",
+    "sonner": "^2.0.7",
+    "zustand": "5.0.14"
   },
   "devDependencies": {
-    "typescript": "6.0.3",
-    "vite": "8.1.0",
-    "@vitejs/plugin-react": "6.0.2",
-    "vitest": "4.1.10",
-    "jsdom": "29.1.1",
-    "@testing-library/react": "16.3.2",
+    "@playwright/test": "1.61.1",
+    "@tailwindcss/vite": "^4.3.2",
     "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "6.9.1",
-    "@playwright/test": "1.61.1",
+    "@testing-library/react": "16.3.2",
     "@types/react": "19.2.3",
-    "@types/react-dom": "19.2.3"
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "jsdom": "29.1.1",
+    "tailwindcss": "^4.3.2",
+    "typescript": "6.0.3",
+    "vite": "8.1.0",
+    "vitest": "4.1.10"
   }
 }

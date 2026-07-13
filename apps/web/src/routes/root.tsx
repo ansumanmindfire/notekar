@@ -1,5 +1,6 @@
 import { Outlet, createRootRoute } from '@tanstack/react-router';
 import { useAuthStore } from '../stores/authStore';
+import { Toaster } from 'sonner';
 
 let bootstrapPromise: Promise<void> | null = null;
 
@@ -14,6 +15,11 @@ export const rootRoute = createRootRoute({
       await bootstrapPromise;
     }
   },
-  component: () => <Outlet />,
+  component: () => (
+    <>
+      <Toaster richColors position="top-right" />
+      <Outlet />
+    </>
+  ),
   pendingComponent: () => <p>Loading…</p>,
 });

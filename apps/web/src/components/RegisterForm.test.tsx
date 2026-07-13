@@ -8,6 +8,7 @@ const navigateMock = vi.fn();
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigateMock,
+  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }));
 
 const INITIAL_STATE = {
