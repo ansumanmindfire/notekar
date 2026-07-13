@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthApi, AuthSession } from './authStore';
-import { setAuthApi, useAuthStore } from './authStore';
+import { realAuthApi, setAuthApi, useAuthStore } from './authStore';
 
 const INITIAL_STATE = {
   accessToken: null,
@@ -32,6 +32,15 @@ describe('authStore', () => {
       },
       true,
     );
+  });
+
+  afterEach(() => {
+    // isolate:false (apps/web/vitest.config.ts) shares the module registry across
+    // test files in a worker, so authStore.ts's module-level `authApi` singleton
+    // must be restored after every test here - otherwise a mocked authApi swapped
+    // in by setAuthApi() above leaks into other files (e.g. authStore.wiring.test.ts,
+    // which relies on the real authApi being active).
+    setAuthApi(realAuthApi);
   });
 
   describe('bootstrap', () => {

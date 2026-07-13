@@ -13,7 +13,7 @@ export interface AuthApi {
   logout(): Promise<void>;
 }
 
-const realAuthApi: AuthApi = {
+export const realAuthApi: AuthApi = {
   login: (email, password) =>
     apiRequest<LoginResponse>('/auth/login', { method: 'POST', body: { email, password } }),
   register: (email, password) =>
