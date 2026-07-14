@@ -33,6 +33,9 @@ export function AppShell({ children }: AppShellProps) {
             <Link to="/notes" className="text-sm font-medium text-slate-600 hover:text-slate-900">
               Notes
             </Link>
+            <Link to="/search" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+              Search
+            </Link>
             <Link to="/notes/trash" className="text-sm font-medium text-slate-600 hover:text-slate-900">
               Trash
             </Link>

@@ -13,6 +13,14 @@ export const UI_COPY = {
     heading: 'Spotless bin!',
     subtext: 'Nothing to see here! The trash bin is completely empty.',
   },
+  EMPTY_SEARCH_RESULTS: {
+    heading: 'No notes match your search',
+    subtext: 'Try a different keyword or check for typos.',
+  },
+  SEARCH_IDLE_PROMPT: {
+    heading: 'Search your notes',
+    subtext: 'Find notes by title or content.',
+  },
   RESTORE_CONFIRM: {
     heading: 'Restore note?',
     body: 'This note will be moved back to your active notes.',
