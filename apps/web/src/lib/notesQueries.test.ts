@@ -22,6 +22,9 @@ import {
   createShareLink,
   revokeShareLink,
   getPublicShare,
+  listVersions,
+  getVersionDetail,
+  restoreVersion,
 } from './notesApi';
 import {
   notesKeys,
@@ -40,6 +43,10 @@ import {
   useCreateShareLinkMutation,
   useRevokeShareLinkMutation,
   usePublicShareQuery,
+  versionsKeys,
+  useVersionsQuery,
+  useVersionDetailQuery,
+  useRestoreVersionMutation,
 } from './notesQueries';
 
 const mockListNotes = vi.mocked(listNotes);
@@ -56,6 +63,9 @@ const mockListShareLinks = vi.mocked(listShareLinks);
 const mockCreateShareLink = vi.mocked(createShareLink);
 const mockRevokeShareLink = vi.mocked(revokeShareLink);
 const mockGetPublicShare = vi.mocked(getPublicShare);
+const mockListVersions = vi.mocked(listVersions);
+const mockGetVersionDetail = vi.mocked(getVersionDetail);
+const mockRestoreVersion = vi.mocked(restoreVersion);
 
 function emptyPage<T>(): Page<T> {
   return { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0 };
@@ -105,6 +115,17 @@ describe('sharesKeys', () => {
 
   it('detail() produces the expected key shape', () => {
     expect(sharesKeys.detail('token-123')).toEqual(['shares', 'public', 'token-123']);
+  });
+});
+
+describe('versionsKeys', () => {
+  it('list() produces the expected key shape', () => {
+    expect(versionsKeys.list('note-1')).toEqual(['versions', 'list', 'note-1']);
+  });
+
+  it('detail() is scoped by both noteId and versionId', () => {
+    expect(versionsKeys.detail('note-1', 'version-1')).toEqual(['versions', 'detail', 'note-1', 'version-1']);
+    expect(versionsKeys.detail('note-2', 'version-1')).not.toEqual(versionsKeys.detail('note-1', 'version-1'));
   });
 });
 
@@ -442,8 +463,78 @@ describe('usePublicShareQuery', () => {
   it('is disabled when token is empty', () => {
     const { wrapper } = createWrapper();
     const { result } = renderHook(() => usePublicShareQuery(''), { wrapper });
-    
+
     expect(mockGetPublicShare).not.toHaveBeenCalled();
     expect(result.current.fetchStatus).toBe('idle');
+  });
+});
+
+describe('useVersionsQuery', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls listVersions with the given noteId and resolves with the returned array', async () => {
+    mockListVersions.mockResolvedValueOnce([]);
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useVersionsQuery('note-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockListVersions).toHaveBeenCalledWith('note-1');
+  });
+});
+
+describe('useVersionDetailQuery', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls getVersionDetail with the given noteId/versionId when enabled', async () => {
+    mockGetVersionDetail.mockResolvedValueOnce({
+      id: 'version-1',
+      version: 2,
+      title: 'Old title',
+      body: {},
+      savedAt: '2026-06-01T12:00:00.000Z',
+    });
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useVersionDetailQuery('note-1', 'version-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGetVersionDetail).toHaveBeenCalledWith('note-1', 'version-1');
+  });
+
+  it('does not call getVersionDetail when enabled is false', () => {
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useVersionDetailQuery('note-1', 'version-1', { enabled: false }), {
+      wrapper,
+    });
+
+    expect(mockGetVersionDetail).not.toHaveBeenCalled();
+    expect(result.current.fetchStatus).toBe('idle');
+  });
+});
+
+describe('useRestoreVersionMutation', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls restoreVersion and invalidates both notesKeys.detail(noteId) and versionsKeys.list(noteId), but not a bare ["notes"] prefix', async () => {
+    mockRestoreVersion.mockResolvedValueOnce({ id: 'note-1', version: 3 } as Note);
+    const { queryClient, wrapper } = createWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useRestoreVersionMutation('note-1'), { wrapper });
+    result.current.mutate('version-1');
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockRestoreVersion).toHaveBeenCalledWith('note-1', 'version-1');
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesKeys.detail('note-1') });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: versionsKeys.list('note-1') });
+    expect(invalidateSpy).not.toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['notes'] }));
   });
 });

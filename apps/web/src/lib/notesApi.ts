@@ -1,4 +1,4 @@
-import type { Note, NoteSort, Page, SearchResultItem, Tag, TagColor, TipTapDocument, TagWithCount, ShareLink, CreatedShareLink, PublicShareView } from 'shared';
+import type { Note, NoteSort, Page, SearchResultItem, Tag, TagColor, TipTapDocument, TagWithCount, ShareLink, CreatedShareLink, PublicShareView, NoteVersionSummary, NoteVersionDetail } from 'shared';
 import { apiRequest } from './apiClient';
 
 export interface ListNotesParams {
@@ -120,4 +120,16 @@ export function revokeShareLink(noteId: string, token: string): Promise<void> {
 
 export function getPublicShare(token: string): Promise<PublicShareView> {
   return apiRequest<PublicShareView>(`/public/shares/${token}`);
+}
+
+export function listVersions(noteId: string): Promise<NoteVersionSummary[]> {
+  return apiRequest<NoteVersionSummary[]>(`/notes/${noteId}/versions`);
+}
+
+export function getVersionDetail(noteId: string, versionId: string): Promise<NoteVersionDetail> {
+  return apiRequest<NoteVersionDetail>(`/notes/${noteId}/versions/${versionId}`);
+}
+
+export function restoreVersion(noteId: string, versionId: string): Promise<Note> {
+  return apiRequest<Note>(`/notes/${noteId}/versions/${versionId}/restore`, { method: 'POST' });
 }

@@ -14,6 +14,9 @@ import {
   createShareLink,
   revokeShareLink,
   getPublicShare,
+  listVersions,
+  getVersionDetail,
+  restoreVersion,
 } from './notesApi';
 
 vi.mock('./apiClient', () => ({
@@ -240,6 +243,26 @@ describe('notesApi', () => {
       vi.mocked(apiRequest).mockResolvedValueOnce({} as never);
       await getPublicShare('token-123');
       expect(apiRequest).toHaveBeenCalledWith('/public/shares/token-123');
+    });
+  });
+
+  describe('versions', () => {
+    it('listVersions GETs /notes/{id}/versions', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce([] as never);
+      await listVersions('note-1');
+      expect(apiRequest).toHaveBeenCalledWith('/notes/note-1/versions');
+    });
+
+    it('getVersionDetail GETs /notes/{id}/versions/{versionId}', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce({} as never);
+      await getVersionDetail('note-1', 'version-1');
+      expect(apiRequest).toHaveBeenCalledWith('/notes/note-1/versions/version-1');
+    });
+
+    it('restoreVersion POSTs to /notes/{id}/versions/{versionId}/restore with no body', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce({ id: 'note-1' } as never);
+      await restoreVersion('note-1', 'version-1');
+      expect(apiRequest).toHaveBeenCalledWith('/notes/note-1/versions/version-1/restore', { method: 'POST' });
     });
   });
 });
