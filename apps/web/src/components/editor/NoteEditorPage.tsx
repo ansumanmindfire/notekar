@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import type { Editor } from '@tiptap/react';
-import { Share2, Trash2 } from 'lucide-react';
+import { History, Share2, Trash2 } from 'lucide-react';
 import type { Note, TipTapDocument } from 'shared';
 import { titleSchema } from 'shared';
 import { useAutosave } from '../../hooks/useAutosave';
@@ -17,6 +17,7 @@ import { AutosaveStatusPill } from './AutosaveStatusPill';
 import { TagCombobox } from './TagCombobox';
 import { DeleteNoteModal } from './DeleteNoteModal';
 import { ShareModal } from '../shares/ShareModal';
+import { VersionHistoryModal } from '../versions/VersionHistoryModal';
 
 const EMPTY_BODY: TipTapDocument = { type: 'doc', content: [{ type: 'paragraph' }] };
 
@@ -72,6 +73,7 @@ export function NoteEditorPage({ mode, noteId }: NoteEditorPageProps) {
 
   return (
     <EditorBody
+      key={mode === 'existing' ? noteQuery.data!.version : 'new'}
       mode={mode}
       noteId={noteId}
       initialTitle={mode === 'existing' ? noteQuery.data!.title : ''}
@@ -92,6 +94,12 @@ interface EditorBodyProps {
 }
 
 function EditorBody({ mode, noteId, initialTitle, initialBody, existingTagIds, onCreated }: EditorBodyProps) {
+  // initialTitle/initialBody double as the "Current" side of the version-history
+  // split view: they're re-derived from noteQuery.data (last-saved server state)
+  // on every EditorBody remount, never the live in-editor draft (see spec.md's
+  // "Split-view baseline" decision).
+  const currentTitle = initialTitle;
+  const currentBody = initialBody;
   const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState(initialBody);
   const [pendingTagIds, setPendingTagIds] = useState<string[]>([]);
@@ -99,6 +107,7 @@ function EditorBody({ mode, noteId, initialTitle, initialBody, existingTagIds, o
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [versionsModalOpen, setVersionsModalOpen] = useState(false);
 
   const autosave = useAutosave({
     mode,
@@ -142,6 +151,14 @@ function EditorBody({ mode, noteId, initialTitle, initialBody, existingTagIds, o
             <>
               <button
                 type="button"
+                onClick={() => setVersionsModalOpen(true)}
+                aria-label="Version history"
+                className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+              >
+                <History className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
                 onClick={() => setShareModalOpen(true)}
                 aria-label="Share note"
                 className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
@@ -177,6 +194,13 @@ function EditorBody({ mode, noteId, initialTitle, initialBody, existingTagIds, o
         <>
           <DeleteNoteModal noteId={noteId} open={deleteModalOpen} onOpenChange={setDeleteModalOpen} />
           <ShareModal noteId={noteId} open={shareModalOpen} onOpenChange={setShareModalOpen} />
+          <VersionHistoryModal
+            noteId={noteId}
+            currentTitle={currentTitle}
+            currentBody={currentBody}
+            open={versionsModalOpen}
+            onOpenChange={setVersionsModalOpen}
+          />
         </>
       )}
     </div>

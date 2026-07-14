@@ -32,7 +32,9 @@ vi.mock('./EditorToolbar', () => ({
 }));
 
 vi.mock('./TagCombobox', () => ({
-  TagCombobox: () => <div data-testid="tag-combobox" />,
+  TagCombobox: ({ attachedTagIds }: { attachedTagIds: string[] }) => (
+    <div data-testid="tag-combobox" data-tag-ids={attachedTagIds.join(',')} />
+  ),
 }));
 
 vi.mock('./DeleteNoteModal', () => ({
@@ -41,6 +43,10 @@ vi.mock('./DeleteNoteModal', () => ({
 
 vi.mock('../shares/ShareModal', () => ({
   ShareModal: ({ open }: { open: boolean }) => (open ? <div data-testid="share-modal" /> : null),
+}));
+
+vi.mock('../versions/VersionHistoryModal', () => ({
+  VersionHistoryModal: ({ open }: { open: boolean }) => (open ? <div data-testid="version-history-modal" /> : null),
 }));
 
 vi.mock('./AutosaveStatusPill', () => ({
@@ -67,7 +73,13 @@ function makeNote(overrides: Partial<Note> = {}): Note {
 }
 
 function renderWithRouter(ui: React.ReactNode) {
-  const rootRoute = createRootRoute({ component: () => <>{ui}</> });
+  const rootRoute = createRootRoute({ 
+    component: () => (
+      <QueryClientProvider client={queryClient}>
+        {ui}
+      </QueryClientProvider>
+    ) 
+  });
   const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' });
   const routeTree = rootRoute.addChildren([indexRoute]);
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) });
@@ -165,6 +177,52 @@ describe('NoteEditorPage', () => {
     expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument();
     fireEvent.click(shareBtn);
     expect(screen.getByTestId('share-modal')).toBeInTheDocument();
+  });
+
+  it('mode="existing" renders the History button, and clicking it opens the VersionHistoryModal', () => {
+    mockUseNoteQuery.mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: makeNote(),
+    } as never);
+
+    renderWithRouter(<NoteEditorPage mode="existing" noteId="note-1" />);
+
+    const historyBtn = screen.getByLabelText('Version history');
+    expect(historyBtn).toBeInTheDocument();
+
+    expect(screen.queryByTestId('version-history-modal')).not.toBeInTheDocument();
+    fireEvent.click(historyBtn);
+    expect(screen.getByTestId('version-history-modal')).toBeInTheDocument();
+  });
+
+  it('mode="new" renders no History button', () => {
+    renderWithRouter(<NoteEditorPage mode="new" />);
+
+    expect(screen.queryByLabelText('Version history')).not.toBeInTheDocument();
+  });
+
+  it('remounts EditorBody (resetting the title input to the freshly-loaded value) when noteQuery.data.version changes, e.g. after a version restore', () => {
+    mockUseNoteQuery.mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: makeNote({ version: 1, title: 'Original title', tagIds: ['tag-a'] }),
+    } as never);
+
+    const { rerender } = render(<NoteEditorPage mode="existing" noteId="note-1" />);
+    expect(screen.getByLabelText('Title')).toHaveValue('Original title');
+    expect(screen.getByTestId('tag-combobox')).toHaveAttribute('data-tag-ids', 'tag-a');
+
+    mockUseNoteQuery.mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: makeNote({ version: 2, title: 'Restored title', tagIds: ['tag-a'] }),
+    } as never);
+    rerender(<NoteEditorPage mode="existing" noteId="note-1" />);
+
+    expect(screen.getByLabelText('Title')).toHaveValue('Restored title');
+    // Tags are current-state metadata, unaffected by the version-triggered remount (FR-VER-2).
+    expect(screen.getByTestId('tag-combobox')).toHaveAttribute('data-tag-ids', 'tag-a');
   });
 
   it('mode="existing" renders the full-page 404 error state with a "Return to Active Notes" action', () => {
