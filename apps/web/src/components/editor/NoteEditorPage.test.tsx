@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Note } from 'shared';
 import { NoteEditorPage } from './NoteEditorPage';
 import { ApiRequestError } from '../../lib/apiClient';
@@ -72,19 +72,16 @@ function makeNote(overrides: Partial<Note> = {}): Note {
   };
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+});
+
 function renderWithRouter(ui: React.ReactNode) {
-  const rootRoute = createRootRoute({ 
-    component: () => (
-      <QueryClientProvider client={queryClient}>
-        {ui}
-      </QueryClientProvider>
-    ) 
-  });
-  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' });
-  const routeTree = rootRoute.addChildren([indexRoute]);
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) });
-  
-  return render(<RouterProvider router={router} />);
+  return render(
+    <QueryClientProvider client={queryClient}>
+      {ui}
+    </QueryClientProvider>
+  );
 }
 
 describe('NoteEditorPage', () => {

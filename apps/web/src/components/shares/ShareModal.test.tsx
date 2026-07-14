@@ -41,8 +41,10 @@ describe('ShareModal', () => {
     vi.clearAllMocks();
     user = userEvent.setup();
     clipboardWriteText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: { writeText: clipboardWriteText }
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: clipboardWriteText },
+      writable: true,
+      configurable: true,
     });
   });
 
