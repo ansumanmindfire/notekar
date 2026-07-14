@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreateNoteParams, CreateTagParams, ListNotesParams, ListTrashParams, SearchParams, UpdateNoteParams } from './notesApi';
-import { createNote, createTag, deleteNote, getNote, listNotes, listTags, listTrash, restoreNote, search, updateNote, listShareLinks, createShareLink, revokeShareLink, getPublicShare } from './notesApi';
+import { createNote, createTag, deleteNote, getNote, listNotes, listTags, listTrash, restoreNote, search, updateNote, listShareLinks, createShareLink, revokeShareLink, getPublicShare, listVersions, getVersionDetail, restoreVersion } from './notesApi';
 
 export const notesKeys = {
   list: (params: ListNotesParams) => ['notes', 'list', params] as const,
@@ -13,6 +13,11 @@ export const notesKeys = {
 export const sharesKeys = {
   list: (noteId: string) => ['shares', 'list', noteId] as const,
   detail: (token: string) => ['shares', 'public', token] as const,
+};
+
+export const versionsKeys = {
+  list: (noteId: string) => ['versions', 'list', noteId] as const,
+  detail: (noteId: string, versionId: string) => ['versions', 'detail', noteId, versionId] as const,
 };
 
 const TAGS_STALE_TIME_MS = 60_000;
@@ -153,5 +158,32 @@ export function usePublicShareQuery(token: string) {
     queryKey: sharesKeys.detail(token),
     queryFn: () => getPublicShare(token),
     enabled: token.length > 0,
+  });
+}
+
+export function useVersionsQuery(noteId: string) {
+  return useQuery({
+    queryKey: versionsKeys.list(noteId),
+    queryFn: () => listVersions(noteId),
+  });
+}
+
+export function useVersionDetailQuery(noteId: string, versionId: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: versionsKeys.detail(noteId, versionId),
+    queryFn: () => getVersionDetail(noteId, versionId),
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function useRestoreVersionMutation(noteId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (versionId: string) => restoreVersion(noteId, versionId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: notesKeys.detail(noteId) });
+      void queryClient.invalidateQueries({ queryKey: versionsKeys.list(noteId) });
+    },
   });
 }

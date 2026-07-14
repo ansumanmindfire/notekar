@@ -54,4 +54,16 @@ export const UI_COPY = {
     heading: 'Link no longer valid',
     subtext: 'This share link has expired, been revoked, or the note no longer exists.',
   },
+  VERSION_HISTORY: {
+    heading: 'Version History',
+    emptyState: 'No past versions yet. Versions are saved automatically each time you edit this note.',
+    currentLabel: 'Current',
+    restoreButton: 'Restore this version',
+  },
+  RESTORE_VERSION_CONFIRM: {
+    heading: 'Restore this version?',
+    body: 'The note’s title and content will revert to this version. A snapshot of the current content is saved first, so nothing is lost.',
+    confirm: 'Restore',
+    cancel: 'Cancel',
+  },
 } as const;

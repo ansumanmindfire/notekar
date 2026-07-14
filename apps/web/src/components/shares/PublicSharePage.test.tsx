@@ -64,6 +64,7 @@ describe('PublicSharePage', () => {
     mockGetPublicShare.mockRejectedValueOnce(new ApiRequestError({ code: 'GONE_LINK_INVALID', message: 'Gone' }));
 
     renderPage();
+    await vi.advanceTimersByTimeAsync(300);
 
     expect(await screen.findByRole('heading', { level: 1, name: UI_COPY.PUBLIC_SHARE_INVALID.heading })).toBeInTheDocument();
     expect(await screen.findByText(UI_COPY.PUBLIC_SHARE_INVALID.subtext)).toBeInTheDocument();
@@ -92,9 +93,11 @@ describe('PublicSharePage', () => {
       },
       viewCount: 1,
       sharedAt: '2026-06-01T12:00:00.000Z'
-    });
+    };
 
+    mockGetPublicShare.mockResolvedValueOnce(maliciousView);
     const { container } = renderPage();
+    await vi.advanceTimersByTimeAsync(300);
 
     const heading = await screen.findByRole('heading', { level: 1, name: 'Malicious Note' });
     expect(heading).toBeInTheDocument();
