@@ -71,7 +71,7 @@ describe('NoteEditorPage', () => {
 
     // useAutosave itself is mocked (its own creation flow is covered by
     // useAutosave.test.ts); this exercises NoteEditorPage's onCreated wiring.
-    const call = vi.mocked(useAutosave).mock.calls[0][0] as { onCreated: (note: Note) => void };
+    const call = vi.mocked(useAutosave).mock.calls[0]![0] as { onCreated: (note: Note) => void };
     call.onCreated(makeNote({ id: 'new-note-1' }));
 
     expect(navigateMock).toHaveBeenCalledWith({

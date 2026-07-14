@@ -17,6 +17,9 @@ import { AppShell } from './AppShell';
 // try/finally behavior of logout() itself (session clearing on success vs.
 // network failure) is already covered by authStore.test.ts and is not
 // re-asserted here.
+//
+// AB-1013 extends this with the "Search" nav link AppShell adds between "Notes"
+// and "Trash".
 
 const INITIAL_STATE = {
   accessToken: null,
@@ -53,8 +56,8 @@ function seedAuthenticated(): void {
 
 // A minimal, self-contained route tree (independent of the real app router in
 // src/routes/router.tsx) that hosts AppShell under test at /notes, plus stub
-// destinations for its Notes/Trash/logout navigation targets. This keeps the
-// test focused purely on AppShell's own wiring, without pulling in the real
+// destinations for its Notes/Search/Trash/logout navigation targets. This keeps
+// the test focused purely on AppShell's own wiring, without pulling in the real
 // notesRoute's TanStack Query data-fetching (NotesListPage) or auth guards.
 function buildTestRouter(initialPath: string) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
@@ -62,6 +65,11 @@ function buildTestRouter(initialPath: string) {
     getParentRoute: () => rootRoute,
     path: '/notes',
     component: () => <AppShell>{'Notes content'}</AppShell>,
+  });
+  const searchRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/search',
+    component: () => <p>Search page</p>,
   });
   const trashRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -73,7 +81,7 @@ function buildTestRouter(initialPath: string) {
     path: '/login',
     component: () => <p>Login page</p>,
   });
-  const routeTree = rootRoute.addChildren([notesRoute, trashRoute, loginRoute]);
+  const routeTree = rootRoute.addChildren([notesRoute, searchRoute, trashRoute, loginRoute]);
 
   return createRouter({
     routeTree,
@@ -113,6 +121,29 @@ describe('AppShell', () => {
 
     expect(screen.getByRole('link', { name: 'Notes' })).toHaveAttribute('href', '/notes');
     expect(screen.getByRole('link', { name: 'Trash' })).toHaveAttribute('href', '/notes/trash');
+  });
+
+  it('renders a Search nav link pointing at /search, placed between Notes and Trash', async () => {
+    setAuthApi(makeMockAuthApi());
+    await renderAt('/notes');
+
+    const searchLink = screen.getByRole('link', { name: 'Search' });
+    expect(searchLink).toHaveAttribute('href', '/search');
+
+    const navLinks = screen.getAllByRole('link').map((link) => link.textContent);
+    expect(navLinks).toEqual(['Notes', 'Search', 'Trash']);
+  });
+
+  it('navigates to /search when the Search nav link is clicked', async () => {
+    setAuthApi(makeMockAuthApi());
+    const testRouter = await renderAt('/notes');
+
+    fireEvent.click(screen.getByRole('link', { name: 'Search' }));
+
+    await waitFor(() => {
+      expect(testRouter.state.location.pathname).toBe('/search');
+    });
+    expect(await screen.findByText('Search page')).toBeInTheDocument();
   });
 
   it('calls authStore.logout() and navigates to /login when the logout button is clicked', async () => {

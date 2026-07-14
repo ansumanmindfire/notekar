@@ -9,13 +9,7 @@ import { UI_COPY } from '../../lib/uiCopy';
 // default-focused element, Cancel must never trigger the mutation, and Restore
 // must show a Loader2 spinner while the mutation is in flight.
 
-vi.mock('../../lib/notesApi', () => ({
-  listNotes: vi.fn(),
-  listTags: vi.fn(),
-  listTrash: vi.fn(),
-  restoreNote: vi.fn(),
-  getNote: vi.fn(),
-}));
+vi.mock('../../lib/notesApi');
 
 vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn() },

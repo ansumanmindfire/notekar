@@ -19,6 +19,13 @@ import { realAuthApi, setAuthApi, useAuthStore } from '../stores/authStore';
 // not real data-fetching behavior (that's covered by NotesListPage.test.tsx /
 // TrashListPage.test.tsx).
 //
+// AB-1013 extends this file with the unauthenticated-redirect guard for the new
+// `/search` route (its `beforeLoad` uses the same `status !== 'authenticated'`
+// check as every other protected route). SearchPage never calls `search()` on
+// this path — its query is gated on a non-empty trimmed query, and the redirect
+// fires before SearchPage ever mounts — so no `search` fixture is needed in the
+// mock factory below.
+//
 // Each test builds its own Router instance (same `routeTree` the app uses, via
 // `appRouter.routeTree`) backed by a fresh `createMemoryHistory`, so tests never
 // share navigation history. A fresh `QueryClient` is likewise constructed per
@@ -37,35 +44,28 @@ import { realAuthApi, setAuthApi, useAuthStore } from '../stores/authStore';
 // resolve vs. reject) is unit-tested directly against the store, independent of
 // the router, in `authStore.test.ts`.
 
-vi.mock('../lib/notesApi', () => {
-  const emptyNotesPage = { items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 0 };
-  const emptyTagsPage = { items: [], page: 1, pageSize: 50, totalItems: 0, totalPages: 0 };
-  const fixtureNote = {
-    id: 'abc123',
-    title: 'Guard Test Note',
-    body: { type: 'doc', content: [] },
-    tagIds: [],
-    version: 1,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    deletedAt: null,
-  };
+vi.mock('../lib/notesApi');
 
-  return {
-    listNotes: vi.fn().mockResolvedValue(emptyNotesPage),
-    listTags: vi.fn().mockResolvedValue(emptyTagsPage),
-    listTrash: vi.fn().mockResolvedValue(emptyNotesPage),
-    getNote: vi.fn().mockResolvedValue(fixtureNote),
-    restoreNote: vi.fn().mockResolvedValue(fixtureNote),
-    // AB-1012 - NoteEditorPage/TagCombobox/DeleteNoteModal/useAutosave import
-    // these, but no guard test here simulates typing/clicking, so they're never
-    // actually invoked - stubbed only so the mocked module shape matches.
-    createNote: vi.fn(),
-    updateNote: vi.fn(),
-    deleteNote: vi.fn(),
-    createTag: vi.fn(),
-  };
-});
+import { listNotes, listTags, listTrash, getNote, restoreNote } from '../lib/notesApi';
+
+const emptyNotesPage = { items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 0 };
+const emptyTagsPage = { items: [], page: 1, pageSize: 50, totalItems: 0, totalPages: 0 };
+const fixtureNote = {
+  id: 'abc123',
+  title: 'Guard Test Note',
+  body: { type: 'doc', content: [] },
+  tagIds: [],
+  version: 1,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  deletedAt: null,
+};
+
+vi.mocked(listNotes).mockResolvedValue(emptyNotesPage);
+vi.mocked(listTags).mockResolvedValue(emptyTagsPage);
+vi.mocked(listTrash).mockResolvedValue(emptyNotesPage);
+vi.mocked(getNote).mockResolvedValue(fixtureNote);
+vi.mocked(restoreNote).mockResolvedValue(fixtureNote);
 
 const INITIAL_STATE = {
   accessToken: null,
@@ -243,6 +243,13 @@ describe('router route guards', () => {
 
     it('is redirected from /notes/new to /login', async () => {
       const testRouter = await renderAt('/notes/new');
+
+      expect(testRouter.state.location.pathname).toBe('/login');
+      expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument();
+    });
+
+    it('is redirected from /search to /login', async () => {
+      const testRouter = await renderAt('/search');
 
       expect(testRouter.state.location.pathname).toBe('/login');
       expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument();

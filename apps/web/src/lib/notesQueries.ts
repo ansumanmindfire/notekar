@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreateNoteParams, CreateTagParams, ListNotesParams, ListTrashParams, UpdateNoteParams } from './notesApi';
-import { createNote, createTag, deleteNote, getNote, listNotes, listTags, listTrash, restoreNote, updateNote } from './notesApi';
+import type { CreateNoteParams, CreateTagParams, ListNotesParams, ListTrashParams, SearchParams, UpdateNoteParams } from './notesApi';
+import { createNote, createTag, deleteNote, getNote, listNotes, listTags, listTrash, restoreNote, search, updateNote } from './notesApi';
 
 export const notesKeys = {
   list: (params: ListNotesParams) => ['notes', 'list', params] as const,
   trash: (params: ListTrashParams) => ['notes', 'trash', params] as const,
   detail: (noteId: string) => ['notes', 'detail', noteId] as const,
   tags: () => ['tags', 'list'] as const,
+  search: (params: SearchParams) => ['search', params.q, params.page, params.pageSize] as const,
 };
 
 const TAGS_STALE_TIME_MS = 60_000;
@@ -38,6 +39,14 @@ export function useNoteQuery(noteId: string, options: { enabled?: boolean } = {}
     queryKey: notesKeys.detail(noteId),
     queryFn: () => getNote(noteId),
     enabled: options.enabled ?? true,
+  });
+}
+
+export function useSearchQuery(params: SearchParams, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: notesKeys.search(params),
+    queryFn: () => search(params),
+    enabled: options.enabled ?? params.q.trim().length > 0,
   });
 }
 

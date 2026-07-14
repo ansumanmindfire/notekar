@@ -1,4 +1,4 @@
-import type { Note, NoteSort, Page, Tag, TagColor, TipTapDocument, TagWithCount } from 'shared';
+import type { Note, NoteSort, Page, SearchResultItem, Tag, TagColor, TipTapDocument, TagWithCount } from 'shared';
 import { apiRequest } from './apiClient';
 
 export interface ListNotesParams {
@@ -37,6 +37,17 @@ export function listNotes({ sort, tagIds, page, pageSize }: ListNotesParams): Pr
 export function listTrash({ page, pageSize }: ListTrashParams): Promise<Page<Note>> {
   const query = buildQueryString({ page, pageSize });
   return apiRequest<Page<Note>>(`/notes/trash${query}`);
+}
+
+export interface SearchParams {
+  q: string;
+  page: number;
+  pageSize: number;
+}
+
+export function search({ q, page, pageSize }: SearchParams): Promise<Page<SearchResultItem>> {
+  const query = buildQueryString({ q, page, pageSize });
+  return apiRequest<Page<SearchResultItem>>(`/search${query}`);
 }
 
 // Matches packages/shared/src/schemas.ts's paginationQuerySchema max bound (50) -

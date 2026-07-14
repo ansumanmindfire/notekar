@@ -2,12 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
-import type { Note, Page, TagWithCount } from 'shared';
+import type { Note, Page, SearchResultItem, TagWithCount } from 'shared';
 import { ApiRequestError } from './apiClient';
 
 vi.mock('./notesApi');
 
-import { createNote, createTag, deleteNote, getNote, listNotes, listTags, listTrash, restoreNote, updateNote } from './notesApi';
+import {
+  createNote,
+  createTag,
+  deleteNote,
+  getNote,
+  listNotes,
+  listTags,
+  listTrash,
+  restoreNote,
+  search,
+  updateNote,
+} from './notesApi';
 import {
   notesKeys,
   useCreateNoteMutation,
@@ -16,6 +27,7 @@ import {
   useNoteQuery,
   useNotesListQuery,
   useRestoreNoteMutation,
+  useSearchQuery,
   useTagsQuery,
   useTrashListQuery,
   useUpdateNoteMutation,
@@ -30,6 +42,7 @@ const mockCreateNote = vi.mocked(createNote);
 const mockUpdateNote = vi.mocked(updateNote);
 const mockDeleteNote = vi.mocked(deleteNote);
 const mockCreateTag = vi.mocked(createTag);
+const mockSearch = vi.mocked(search);
 
 function emptyPage<T>(): Page<T> {
   return { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0 };
@@ -65,6 +78,10 @@ describe('notesKeys', () => {
 
   it('detail() produces the expected key shape', () => {
     expect(notesKeys.detail('note-1')).toEqual(['notes', 'detail', 'note-1']);
+  });
+
+  it('search() produces a key made of q, page, and pageSize', () => {
+    expect(notesKeys.search({ q: 'hello', page: 2, pageSize: 10 })).toEqual(['search', 'hello', 2, 10]);
   });
 });
 
@@ -121,6 +138,67 @@ describe('useTagsQuery', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockListTags).toHaveBeenCalledTimes(1);
     expect(result.current.data).toEqual(page);
+  });
+});
+
+describe('useSearchQuery', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does not call search when q is an empty string (disabled by default)', () => {
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useSearchQuery({ q: '', page: 1, pageSize: 10 }), { wrapper });
+
+    expect(mockSearch).not.toHaveBeenCalled();
+    expect(result.current.fetchStatus).toBe('idle');
+  });
+
+  it('does not call search when q is whitespace-only (disabled by default)', () => {
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useSearchQuery({ q: '   ', page: 1, pageSize: 10 }), { wrapper });
+
+    expect(mockSearch).not.toHaveBeenCalled();
+    expect(result.current.fetchStatus).toBe('idle');
+  });
+
+  it('calls search with the given params and resolves with the returned page when q is non-empty', async () => {
+    const page = emptyPage<SearchResultItem>();
+    mockSearch.mockResolvedValueOnce(page);
+    const { wrapper } = createWrapper();
+    const params = { q: 'hello', page: 1, pageSize: 10 };
+
+    const { result } = renderHook(() => useSearchQuery(params), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockSearch).toHaveBeenCalledWith(params);
+    expect(result.current.data).toEqual(page);
+  });
+
+  it('includes q, page, and pageSize in the query key used to fetch', async () => {
+    const page = emptyPage<SearchResultItem>();
+    mockSearch.mockResolvedValueOnce(page);
+    const { queryClient, wrapper } = createWrapper();
+    const params = { q: 'hello', page: 2, pageSize: 10 };
+
+    const { result } = renderHook(() => useSearchQuery(params), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(queryClient.getQueryData(notesKeys.search(params))).toEqual(page);
+  });
+
+  it('respects an explicit enabled: false override even when q is non-empty', () => {
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () => useSearchQuery({ q: 'hello', page: 1, pageSize: 10 }, { enabled: false }),
+      { wrapper },
+    );
+
+    expect(mockSearch).not.toHaveBeenCalled();
+    expect(result.current.fetchStatus).toBe('idle');
   });
 });
 
