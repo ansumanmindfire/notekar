@@ -46,7 +46,7 @@ import { realAuthApi, setAuthApi, useAuthStore } from '../stores/authStore';
 
 vi.mock('../lib/notesApi');
 
-import { listNotes, listTags, listTrash, getNote, restoreNote } from '../lib/notesApi';
+import { listNotes, listTags, listTrash, getNote, restoreNote, getPublicShare } from '../lib/notesApi';
 
 const emptyNotesPage = { items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 0 };
 const emptyTagsPage = { items: [], page: 1, pageSize: 50, totalItems: 0, totalPages: 0 };
@@ -66,6 +66,12 @@ vi.mocked(listTags).mockResolvedValue(emptyTagsPage);
 vi.mocked(listTrash).mockResolvedValue(emptyNotesPage);
 vi.mocked(getNote).mockResolvedValue(fixtureNote);
 vi.mocked(restoreNote).mockResolvedValue(fixtureNote);
+vi.mocked(getPublicShare).mockResolvedValue({
+  title: 'Mock Public Share',
+  body: { type: 'doc', content: [] },
+  viewCount: 1,
+  sharedAt: '2026-06-01T12:00:00.000Z',
+});
 
 const INITIAL_STATE = {
   accessToken: null,
@@ -213,6 +219,13 @@ describe('router route guards', () => {
       expect(testRouter.state.location.pathname).toBe('/notes');
       expect(await screen.findByRole('heading', { name: 'Notes' })).toBeInTheDocument();
     });
+
+    it('stays on /shares/$token (no redirect, public route)', async () => {
+      const testRouter = await renderAt('/shares/token-123');
+
+      expect(testRouter.state.location.pathname).toBe('/shares/token-123');
+      expect(await screen.findByRole('heading', { name: 'Mock Public Share' })).toBeInTheDocument();
+    });
   });
 
   describe('unauthenticated user', () => {
@@ -281,6 +294,13 @@ describe('router route guards', () => {
 
       expect(testRouter.state.location.pathname).toBe('/login');
       expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument();
+    });
+
+    it('stays on /shares/$token (no redirect, public route)', async () => {
+      const testRouter = await renderAt('/shares/token-123');
+
+      expect(testRouter.state.location.pathname).toBe('/shares/token-123');
+      expect(await screen.findByRole('heading', { name: 'Mock Public Share' })).toBeInTheDocument();
     });
   });
 
