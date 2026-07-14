@@ -12,13 +12,7 @@ import { UI_COPY } from '../../lib/uiCopy';
 // wiring - RestoreConfirmModal's own behavior is covered by
 // RestoreConfirmModal.test.tsx.
 
-vi.mock('../../lib/notesApi', () => ({
-  listNotes: vi.fn(),
-  listTags: vi.fn(),
-  listTrash: vi.fn(),
-  restoreNote: vi.fn(),
-  getNote: vi.fn(),
-}));
+vi.mock('../../lib/notesApi');
 
 import { getNote, listNotes, listTags, listTrash, restoreNote } from '../../lib/notesApi';
 import { TrashPreviewModal } from './TrashPreviewModal';

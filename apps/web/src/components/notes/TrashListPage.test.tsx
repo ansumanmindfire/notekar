@@ -26,13 +26,7 @@ async function settleMinLoadingTime() {
   await new Promise((resolve) => setTimeout(resolve, MIN_LOADING_SETTLE_MS));
 }
 
-vi.mock('../../lib/notesApi', () => ({
-  listNotes: vi.fn(),
-  listTags: vi.fn(),
-  listTrash: vi.fn(),
-  restoreNote: vi.fn(),
-  getNote: vi.fn(),
-}));
+vi.mock('../../lib/notesApi');
 
 vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn() },

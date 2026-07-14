@@ -14,7 +14,7 @@ import type { EmptyStateVariant } from './EmptyState';
 
 // The 'no-notes' variant renders a <Link to="/notes/new">, so it needs a real
 // router context (matching the AppShell.test.tsx / NoteCard.test.tsx pattern) -
-// the other two variants render plain buttons/text and can be rendered directly.
+// the other variants render plain buttons/text and can be rendered directly.
 
 function buildTestRouter(variant: EmptyStateVariant, onClearFilters?: () => void) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
@@ -103,6 +103,22 @@ describe('EmptyState', () => {
 
     it('renders no CTA at all', async () => {
       await renderEmptyState('empty-trash');
+
+      expect(screen.queryByRole('link')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('no-search-results variant', () => {
+    it('renders the empty-search-results heading and subtext', async () => {
+      await renderEmptyState('no-search-results');
+
+      expect(screen.getByRole('heading', { name: UI_COPY.EMPTY_SEARCH_RESULTS.heading })).toBeInTheDocument();
+      expect(screen.getByText(UI_COPY.EMPTY_SEARCH_RESULTS.subtext)).toBeInTheDocument();
+    });
+
+    it('renders no CTA at all', async () => {
+      await renderEmptyState('no-search-results');
 
       expect(screen.queryByRole('link')).not.toBeInTheDocument();
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
