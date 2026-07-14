@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     pool: 'threads',
-    isolate: false,
+    isolate: true,
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
