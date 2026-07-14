@@ -8,6 +8,7 @@ import {
   listTags,
   listTrash,
   restoreNote,
+  search,
   updateNote,
 } from './notesApi';
 
@@ -77,6 +78,39 @@ describe('notesApi', () => {
       expect(apiRequest).toHaveBeenCalledTimes(1);
       const [path] = vi.mocked(apiRequest).mock.calls[0] as [string];
       expect(path).toBe('/notes/trash?page=1&pageSize=20');
+    });
+  });
+
+  describe('search', () => {
+    it('builds the query string with q, page, and pageSize against /search', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce({
+        items: [],
+        page: 1,
+        pageSize: 10,
+        totalItems: 0,
+        totalPages: 0,
+      });
+
+      await search({ q: 'hello world', page: 1, pageSize: 10 });
+
+      expect(apiRequest).toHaveBeenCalledTimes(1);
+      const [path] = vi.mocked(apiRequest).mock.calls[0] as [string];
+      expect(path).toBe('/search?q=hello+world&page=1&pageSize=10');
+    });
+
+    it('omits q from the query string when it is an empty string', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce({
+        items: [],
+        page: 1,
+        pageSize: 10,
+        totalItems: 0,
+        totalPages: 0,
+      });
+
+      await search({ q: '', page: 1, pageSize: 10 });
+
+      const [path] = vi.mocked(apiRequest).mock.calls[0] as [string];
+      expect(path).toBe('/search?page=1&pageSize=10');
     });
   });
 
