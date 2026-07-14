@@ -10,6 +10,10 @@ import {
   restoreNote,
   search,
   updateNote,
+  listShareLinks,
+  createShareLink,
+  revokeShareLink,
+  getPublicShare,
 } from './notesApi';
 
 vi.mock('./apiClient', () => ({
@@ -193,4 +197,50 @@ describe('notesApi', () => {
       expect(apiRequest).toHaveBeenCalledWith('/tags', { method: 'POST', body: params });
     });
   });
+
+  describe('shares', () => {
+    it('listShareLinks GETs /notes/{id}/shares', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce([] as never);
+      await listShareLinks('note-1');
+      expect(apiRequest).toHaveBeenCalledWith('/notes/note-1/shares');
+    });
+
+    it('createShareLink with days present sends the correctly-computed ISO expiresAt', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T12:00:00Z'));
+      vi.mocked(apiRequest).mockResolvedValueOnce({} as never);
+      
+      await createShareLink('note-1', { days: 14 });
+      
+      expect(apiRequest).toHaveBeenCalledWith('/notes/note-1/shares', {
+        method: 'POST',
+        body: { expiresAt: new Date(Date.now() + 14 * 86_400_000).toISOString() }
+      });
+      vi.useRealTimers();
+    });
+
+    it('createShareLink with days omitted sends no expiresAt field at all', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce({} as never);
+      
+      await createShareLink('note-1', {});
+      
+      expect(apiRequest).toHaveBeenCalledWith('/notes/note-1/shares', {
+        method: 'POST',
+        body: {}
+      });
+    });
+
+    it('revokeShareLink DELETEs /notes/{id}/shares/{token}', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce(undefined as never);
+      await revokeShareLink('note-1', 'token-123');
+      expect(apiRequest).toHaveBeenCalledWith('/notes/note-1/shares/token-123', { method: 'DELETE' });
+    });
+
+    it('getPublicShare GETs /public/shares/:token', async () => {
+      vi.mocked(apiRequest).mockResolvedValueOnce({} as never);
+      await getPublicShare('token-123');
+      expect(apiRequest).toHaveBeenCalledWith('/public/shares/token-123');
+    });
+  });
 });
+

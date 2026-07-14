@@ -1,4 +1,4 @@
-import type { Note, NoteSort, Page, SearchResultItem, Tag, TagColor, TipTapDocument, TagWithCount } from 'shared';
+import type { Note, NoteSort, Page, SearchResultItem, Tag, TagColor, TipTapDocument, TagWithCount, ShareLink, CreatedShareLink, PublicShareView } from 'shared';
 import { apiRequest } from './apiClient';
 
 export interface ListNotesParams {
@@ -100,4 +100,24 @@ export interface CreateTagParams {
 
 export function createTag(params: CreateTagParams): Promise<Tag> {
   return apiRequest<Tag>('/tags', { method: 'POST', body: params });
+}
+
+export function listShareLinks(noteId: string): Promise<ShareLink[]> {
+  return apiRequest<ShareLink[]>(`/notes/${noteId}/shares`);
+}
+
+export function createShareLink(noteId: string, params: { days?: number }): Promise<CreatedShareLink> {
+  const body: { expiresAt?: string } = {};
+  if (params.days !== undefined) {
+    body.expiresAt = new Date(Date.now() + params.days * 86_400_000).toISOString();
+  }
+  return apiRequest<CreatedShareLink>(`/notes/${noteId}/shares`, { method: 'POST', body });
+}
+
+export function revokeShareLink(noteId: string, token: string): Promise<void> {
+  return apiRequest<void>(`/notes/${noteId}/shares/${token}`, { method: 'DELETE' });
+}
+
+export function getPublicShare(token: string): Promise<PublicShareView> {
+  return apiRequest<PublicShareView>(`/public/shares/${token}`);
 }
