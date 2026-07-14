@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreateNoteParams, CreateTagParams, ListNotesParams, ListTrashParams, SearchParams, UpdateNoteParams } from './notesApi';
-import { createNote, createTag, deleteNote, getNote, listNotes, listTags, listTrash, restoreNote, search, updateNote } from './notesApi';
+import { createNote, createTag, deleteNote, getNote, listNotes, listTags, listTrash, restoreNote, search, updateNote, listShareLinks, createShareLink, revokeShareLink, getPublicShare } from './notesApi';
 
 export const notesKeys = {
   list: (params: ListNotesParams) => ['notes', 'list', params] as const,
@@ -8,6 +8,11 @@ export const notesKeys = {
   detail: (noteId: string) => ['notes', 'detail', noteId] as const,
   tags: () => ['tags', 'list'] as const,
   search: (params: SearchParams) => ['search', params.q, params.page, params.pageSize] as const,
+};
+
+export const sharesKeys = {
+  list: (noteId: string) => ['shares', 'list', noteId] as const,
+  detail: (token: string) => ['shares', 'public', token] as const,
 };
 
 const TAGS_STALE_TIME_MS = 60_000;
@@ -111,5 +116,42 @@ export function useCreateTagMutation() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: notesKeys.tags() });
     },
+  });
+}
+
+export function useShareLinksQuery(noteId: string) {
+  return useQuery({
+    queryKey: sharesKeys.list(noteId),
+    queryFn: () => listShareLinks(noteId),
+  });
+}
+
+export function useCreateShareLinkMutation(noteId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (params: { days?: number }) => createShareLink(noteId, params),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: sharesKeys.list(noteId) });
+    },
+  });
+}
+
+export function useRevokeShareLinkMutation(noteId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (token: string) => revokeShareLink(noteId, token),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: sharesKeys.list(noteId) });
+    },
+  });
+}
+
+export function usePublicShareQuery(token: string) {
+  return useQuery({
+    queryKey: sharesKeys.detail(token),
+    queryFn: () => getPublicShare(token),
+    enabled: token.length > 0,
   });
 }

@@ -18,6 +18,10 @@ import {
   restoreNote,
   search,
   updateNote,
+  listShareLinks,
+  createShareLink,
+  revokeShareLink,
+  getPublicShare,
 } from './notesApi';
 import {
   notesKeys,
@@ -31,6 +35,11 @@ import {
   useTagsQuery,
   useTrashListQuery,
   useUpdateNoteMutation,
+  sharesKeys,
+  useShareLinksQuery,
+  useCreateShareLinkMutation,
+  useRevokeShareLinkMutation,
+  usePublicShareQuery,
 } from './notesQueries';
 
 const mockListNotes = vi.mocked(listNotes);
@@ -43,6 +52,10 @@ const mockUpdateNote = vi.mocked(updateNote);
 const mockDeleteNote = vi.mocked(deleteNote);
 const mockCreateTag = vi.mocked(createTag);
 const mockSearch = vi.mocked(search);
+const mockListShareLinks = vi.mocked(listShareLinks);
+const mockCreateShareLink = vi.mocked(createShareLink);
+const mockRevokeShareLink = vi.mocked(revokeShareLink);
+const mockGetPublicShare = vi.mocked(getPublicShare);
 
 function emptyPage<T>(): Page<T> {
   return { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0 };
@@ -82,6 +95,16 @@ describe('notesKeys', () => {
 
   it('search() produces a key made of q, page, and pageSize', () => {
     expect(notesKeys.search({ q: 'hello', page: 2, pageSize: 10 })).toEqual(['search', 'hello', 2, 10]);
+  });
+});
+
+describe('sharesKeys', () => {
+  it('list() produces the expected key shape', () => {
+    expect(sharesKeys.list('note-1')).toEqual(['shares', 'list', 'note-1']);
+  });
+
+  it('detail() produces the expected key shape', () => {
+    expect(sharesKeys.detail('token-123')).toEqual(['shares', 'public', 'token-123']);
   });
 });
 
@@ -341,5 +364,86 @@ describe('useCreateTagMutation', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect((result.current.error as ApiRequestError).code).toBe('TAG_NAME_DUPLICATE');
+  });
+});
+
+describe('useShareLinksQuery', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls listShareLinks and resolves with the returned array', async () => {
+    mockListShareLinks.mockResolvedValueOnce([]);
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useShareLinksQuery('note-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockListShareLinks).toHaveBeenCalledWith('note-1');
+  });
+});
+
+describe('useCreateShareLinkMutation', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls createShareLink and invalidates sharesKeys.list(noteId) specifically', async () => {
+    mockCreateShareLink.mockResolvedValueOnce({ shareUrl: 'http', expiresAt: null, token: '1' } as never);
+    const { queryClient, wrapper } = createWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useCreateShareLinkMutation('note-1'), { wrapper });
+    result.current.mutate({ days: 7 });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockCreateShareLink).toHaveBeenCalledWith('note-1', { days: 7 });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: sharesKeys.list('note-1') });
+    
+    // Explicitly check it does not invalidate ['notes']
+    expect(invalidateSpy).not.toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['notes'] }));
+  });
+});
+
+describe('useRevokeShareLinkMutation', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls revokeShareLink and invalidates sharesKeys.list(noteId)', async () => {
+    mockRevokeShareLink.mockResolvedValueOnce(undefined as never);
+    const { queryClient, wrapper } = createWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useRevokeShareLinkMutation('note-1'), { wrapper });
+    result.current.mutate('token-123');
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockRevokeShareLink).toHaveBeenCalledWith('note-1', 'token-123');
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: sharesKeys.list('note-1') });
+  });
+});
+
+describe('usePublicShareQuery', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls getPublicShare when token is provided', async () => {
+    mockGetPublicShare.mockResolvedValueOnce({ title: 't', body: {} as never, viewCount: 0, sharedAt: 'd' });
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => usePublicShareQuery('token-123'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGetPublicShare).toHaveBeenCalledWith('token-123');
+  });
+
+  it('is disabled when token is empty', () => {
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => usePublicShareQuery(''), { wrapper });
+    
+    expect(mockGetPublicShare).not.toHaveBeenCalled();
+    expect(result.current.fetchStatus).toBe('idle');
   });
 });

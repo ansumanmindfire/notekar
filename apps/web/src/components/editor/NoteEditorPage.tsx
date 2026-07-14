@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import type { Editor } from '@tiptap/react';
-import { Trash2 } from 'lucide-react';
+import { Share2, Trash2 } from 'lucide-react';
 import type { Note, TipTapDocument } from 'shared';
 import { titleSchema } from 'shared';
 import { useAutosave } from '../../hooks/useAutosave';
@@ -16,6 +16,7 @@ import { EditorToolbar } from './EditorToolbar';
 import { AutosaveStatusPill } from './AutosaveStatusPill';
 import { TagCombobox } from './TagCombobox';
 import { DeleteNoteModal } from './DeleteNoteModal';
+import { ShareModal } from '../shares/ShareModal';
 
 const EMPTY_BODY: TipTapDocument = { type: 'doc', content: [{ type: 'paragraph' }] };
 
@@ -97,6 +98,7 @@ function EditorBody({ mode, noteId, initialTitle, initialBody, existingTagIds, o
   const [titleError, setTitleError] = useState<string | null>(null);
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const autosave = useAutosave({
     mode,
@@ -137,14 +139,24 @@ function EditorBody({ mode, noteId, initialTitle, initialBody, existingTagIds, o
         <div className="flex items-center gap-3 pt-2">
           <AutosaveStatusPill onRetry={autosave.retry} />
           {mode === 'existing' && noteId && (
-            <button
-              type="button"
-              onClick={() => setDeleteModalOpen(true)}
-              aria-label="Delete note"
-              className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-red-600"
-            >
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShareModalOpen(true)}
+                aria-label="Share note"
+                className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+              >
+                <Share2 className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteModalOpen(true)}
+                aria-label="Delete note"
+                className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-red-600"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -162,7 +174,10 @@ function EditorBody({ mode, noteId, initialTitle, initialBody, existingTagIds, o
       </div>
 
       {mode === 'existing' && noteId && (
-        <DeleteNoteModal noteId={noteId} open={deleteModalOpen} onOpenChange={setDeleteModalOpen} />
+        <>
+          <DeleteNoteModal noteId={noteId} open={deleteModalOpen} onOpenChange={setDeleteModalOpen} />
+          <ShareModal noteId={noteId} open={shareModalOpen} onOpenChange={setShareModalOpen} />
+        </>
       )}
     </div>
   );

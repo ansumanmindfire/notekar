@@ -37,4 +37,21 @@ export const UI_COPY = {
     cancel: 'Cancel',
   },
   TAG_CREATE_LABEL: (name: string) => `Create "${name}"`,
+  SHARE_MODAL: {
+    heading: 'Share Note',
+    emptyState: 'No active share links. Create one below to share this note.',
+    createLinkLabel: 'Link active for (days):',
+    createLinkButton: 'Create link',
+  },
+  REVOKE_SHARE_CONFIRM: {
+    heading: 'Revoke share link?',
+    body: 'Anyone with this link will immediately lose access to the note. This action cannot be undone.',
+    confirm: 'Revoke',
+    cancel: 'Cancel',
+  },
+  SHARE_LINK_COPIED: 'Link copied to clipboard',
+  PUBLIC_SHARE_INVALID: {
+    heading: 'Link no longer valid',
+    subtext: 'This share link has expired, been revoked, or the note no longer exists.',
+  },
 } as const;

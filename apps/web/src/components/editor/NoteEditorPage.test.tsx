@@ -1,14 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import type { Note } from 'shared';
 import { NoteEditorPage } from './NoteEditorPage';
 import { ApiRequestError } from '../../lib/apiClient';
 
 const navigateMock = vi.fn();
 
-vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => navigateMock,
-}));
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-router')>();
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
 
 vi.mock('../../hooks/useAutosave', () => ({
   useAutosave: vi.fn(() => ({ retry: vi.fn() })),
@@ -34,6 +39,10 @@ vi.mock('./DeleteNoteModal', () => ({
   DeleteNoteModal: ({ open }: { open: boolean }) => (open ? <div data-testid="delete-modal" /> : null),
 }));
 
+vi.mock('../shares/ShareModal', () => ({
+  ShareModal: ({ open }: { open: boolean }) => (open ? <div data-testid="share-modal" /> : null),
+}));
+
 vi.mock('./AutosaveStatusPill', () => ({
   AutosaveStatusPill: () => <div data-testid="autosave-pill" />,
 }));
@@ -57,6 +66,15 @@ function makeNote(overrides: Partial<Note> = {}): Note {
   };
 }
 
+function renderWithRouter(ui: React.ReactNode) {
+  const rootRoute = createRootRoute({ component: () => <>{ui}</> });
+  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' });
+  const routeTree = rootRoute.addChildren([indexRoute]);
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  
+  return render(<RouterProvider router={router} />);
+}
+
 describe('NoteEditorPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,7 +85,7 @@ describe('NoteEditorPage', () => {
   });
 
   it('mode="new" navigates to the new note\'s route once useAutosave reports a successful create', () => {
-    render(<NoteEditorPage mode="new" />);
+    renderWithRouter(<NoteEditorPage mode="new" />);
 
     // useAutosave itself is mocked (its own creation flow is covered by
     // useAutosave.test.ts); this exercises NoteEditorPage's onCreated wiring.
@@ -82,14 +100,15 @@ describe('NoteEditorPage', () => {
   });
 
   it('mode="new" renders an empty title input and no Delete button', () => {
-    render(<NoteEditorPage mode="new" />);
+    renderWithRouter(<NoteEditorPage mode="new" />);
 
     expect(screen.getByLabelText('Title')).toHaveValue('');
     expect(screen.queryByLabelText('Delete note')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Share note')).not.toBeInTheDocument();
   });
 
   it('mode="new" shows an inline validation error when the title is cleared and blurred', () => {
-    render(<NoteEditorPage mode="new" />);
+    renderWithRouter(<NoteEditorPage mode="new" />);
 
     const titleInput = screen.getByLabelText('Title');
     fireEvent.change(titleInput, { target: { value: 'Hello' } });
@@ -102,7 +121,7 @@ describe('NoteEditorPage', () => {
   it('mode="existing" shows a loading skeleton while the note query is pending', () => {
     mockUseNoteQuery.mockReturnValue({ isPending: true, isError: false, data: undefined } as never);
 
-    render(<NoteEditorPage mode="existing" noteId="note-1" />);
+    renderWithRouter(<NoteEditorPage mode="existing" noteId="note-1" />);
 
     expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
   });
@@ -114,7 +133,7 @@ describe('NoteEditorPage', () => {
       data: makeNote({ title: 'Loaded Title' }),
     } as never);
 
-    render(<NoteEditorPage mode="existing" noteId="note-1" />);
+    renderWithRouter(<NoteEditorPage mode="existing" noteId="note-1" />);
 
     expect(screen.getByLabelText('Title')).toHaveValue('Loaded Title');
   });
@@ -126,9 +145,26 @@ describe('NoteEditorPage', () => {
       data: makeNote(),
     } as never);
 
-    render(<NoteEditorPage mode="existing" noteId="note-1" />);
+    renderWithRouter(<NoteEditorPage mode="existing" noteId="note-1" />);
 
     expect(screen.getByLabelText('Delete note')).toBeInTheDocument();
+  });
+
+  it('mode="existing" renders the Share button, and clicking it opens the ShareModal', () => {
+    mockUseNoteQuery.mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: makeNote(),
+    } as never);
+
+    renderWithRouter(<NoteEditorPage mode="existing" noteId="note-1" />);
+
+    const shareBtn = screen.getByLabelText('Share note');
+    expect(shareBtn).toBeInTheDocument();
+
+    expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument();
+    fireEvent.click(shareBtn);
+    expect(screen.getByTestId('share-modal')).toBeInTheDocument();
   });
 
   it('mode="existing" renders the full-page 404 error state with a "Return to Active Notes" action', () => {
@@ -139,7 +175,7 @@ describe('NoteEditorPage', () => {
       data: undefined,
     } as never);
 
-    render(<NoteEditorPage mode="existing" noteId="note-1" />);
+    renderWithRouter(<NoteEditorPage mode="existing" noteId="note-1" />);
 
     expect(screen.getByText('This note could not be found.')).toBeInTheDocument();
     const returnButton = screen.getByRole('button', { name: 'Return to Active Notes' });

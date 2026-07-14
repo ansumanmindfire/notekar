@@ -8,6 +8,7 @@ import { notesTrashRoute } from './notes.trash';
 import { noteDetailRoute } from './notes.$noteId';
 import { noteNewRoute } from './notes.new';
 import { searchRoute } from './search';
+import { sharesTokenRoute } from './shares.$token';
 import { useAuthStore } from '../stores/authStore';
 
 const indexRoute = createRoute({
@@ -29,6 +30,7 @@ const routeTree = rootRoute.addChildren([
   noteDetailRoute,
   noteNewRoute,
   searchRoute,
+  sharesTokenRoute,
 ]);
 
 export const router = createRouter({ routeTree });
