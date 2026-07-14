@@ -28,8 +28,10 @@ export function ShareModal({ noteId, open, onOpenChange }: ShareModalProps) {
       return; // Handled by native form validation, but guard just in case
     }
     
+    const payload = days === '' ? {} : { days: Number(days) };
+    
     createMutation.mutate(
-      { days: days === '' ? undefined : Number(days) },
+      payload,
       {
         onSuccess: () => {
           setDays('');

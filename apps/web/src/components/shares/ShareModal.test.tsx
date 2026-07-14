@@ -146,11 +146,12 @@ describe('ShareModal', () => {
 
   it('Scenario 5: Copy button uses navigator.clipboard', async () => {
     mockListShareLinks.mockResolvedValueOnce([{
+      id: 'share-abc',
       token: 'token-abc',
       shareUrl: 'https://example.com/shares/token-abc',
       viewCount: 0,
       createdAt: '2026',
-      expiresAt: null,
+      expiresAt: '2027-01-01',
       revokedAt: null
     }]);
     
@@ -167,19 +168,21 @@ describe('ShareModal', () => {
   it('Scenario 7: Two simultaneous links render and are manageable', async () => {
     mockListShareLinks.mockResolvedValueOnce([
       {
+        id: 'share-1',
         token: 'token-1',
         shareUrl: 'https://example.com/shares/token-1',
         viewCount: 1,
         createdAt: '2026',
-        expiresAt: null,
+        expiresAt: '2027-01-01',
         revokedAt: null
       },
       {
+        id: 'share-2',
         token: 'token-2',
         shareUrl: 'https://example.com/shares/token-2',
         viewCount: 5,
         createdAt: '2026',
-        expiresAt: null,
+        expiresAt: '2027-01-01',
         revokedAt: null
       }
     ]);
@@ -192,7 +195,7 @@ describe('ShareModal', () => {
     expect(revokeButtons).toHaveLength(2);
     
     // Clicking one opens the nested modal for it
-    await user.click(revokeButtons[0]);
+    await user.click(revokeButtons[0]!);
     expect(screen.getByRole('heading', { name: UI_COPY.REVOKE_SHARE_CONFIRM.heading })).toBeInTheDocument();
   });
 });
