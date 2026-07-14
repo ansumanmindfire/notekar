@@ -97,6 +97,7 @@ export function useUpdateNoteMutation(noteId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: notesKeys.detail(noteId) });
       void queryClient.invalidateQueries({ queryKey: ['notes', 'list'] });
+      void queryClient.invalidateQueries({ queryKey: versionsKeys.list(noteId) });
     },
   });
 }
@@ -161,10 +162,11 @@ export function usePublicShareQuery(token: string) {
   });
 }
 
-export function useVersionsQuery(noteId: string) {
+export function useVersionsQuery(noteId: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: versionsKeys.list(noteId),
     queryFn: () => listVersions(noteId),
+    enabled: options.enabled ?? true,
   });
 }
 
