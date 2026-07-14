@@ -8,11 +8,11 @@ import { test, expect } from '@playwright/test';
 // AB-1010 replaced the AB-1001 placeholder `<h1>NoteApp</h1>` with a full TanStack
 // Router mount. The `/` index route now always redirects: to `/notes` if the session
 // bootstrap resolves authenticated, or to `/login` if it resolves unauthenticated.
-// This test runs against a fresh browser context (no cookies) with only the web dev
-// server running (no API server), so the bootstrap's `/auth/refresh` call fails with
-// a network error and deterministically resolves to `'unauthenticated'`, redirecting
-// `/` to `/login`. This is a deliberate, reviewed change to the baseline smoke test
-// (AB-1010 plan.md risk area #2), not a silent regression.
+// This test runs against a fresh browser context (no cookies). Now that the e2e
+// environment always runs both the web and API servers together, the bootstrap's
+// `/auth/refresh` call hits a real endpoint and gets a 401 (not a network error),
+// which deterministically resolves to `'unauthenticated'`, redirecting `/` to
+// `/login`. This is a deliberate, reviewed change to the baseline smoke test
 test('redirects unauthenticated root visits to the login page', async ({ page }) => {
   await page.goto('/');
 

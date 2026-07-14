@@ -12,6 +12,7 @@ build/
 .env
 .env.local
 .env.*.local
+.env.e2e
 
 # Test artifacts
 coverage/
