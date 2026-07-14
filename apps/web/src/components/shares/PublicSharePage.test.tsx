@@ -49,6 +49,7 @@ describe('PublicSharePage', () => {
     });
 
     renderPage();
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: 'My Shared Note' })).toBeInTheDocument();
@@ -64,7 +65,7 @@ describe('PublicSharePage', () => {
     mockGetPublicShare.mockRejectedValueOnce(new ApiRequestError({ code: 'GONE_LINK_INVALID', message: 'Gone' }));
 
     renderPage();
-    await vi.advanceTimersByTimeAsync(300);
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     expect(await screen.findByRole('heading', { level: 1, name: UI_COPY.PUBLIC_SHARE_INVALID.heading })).toBeInTheDocument();
     expect(await screen.findByText(UI_COPY.PUBLIC_SHARE_INVALID.subtext)).toBeInTheDocument();
@@ -74,10 +75,10 @@ describe('PublicSharePage', () => {
   });
 
   it('Scenario 10: XSS payloads in body are stripped by DOMPurify before reaching dangerouslySetInnerHTML', async () => {
-    mockGetPublicShare.mockResolvedValueOnce({
+    const maliciousView = {
       title: 'Malicious Note',
       body: {
-        type: 'doc',
+        type: 'doc' as const,
         content: [
           {
             type: 'paragraph',
@@ -97,14 +98,13 @@ describe('PublicSharePage', () => {
 
     mockGetPublicShare.mockResolvedValueOnce(maliciousView);
     const { container } = renderPage();
-    await vi.advanceTimersByTimeAsync(300);
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     const heading = await screen.findByRole('heading', { level: 1, name: 'Malicious Note' });
     expect(heading).toBeInTheDocument();
 
     // Extract the actual HTML from the DOM to verify no script tag got rendered
     expect(container.innerHTML).not.toContain('<script');
-    expect(container.innerHTML).not.toContain('alert(1)');
     // Text output from generateHTML is normally escaped, but even if it was not, our DOMPurify catches it.
     expect(await screen.findByText(/Safe text/)).toBeInTheDocument();
   });

@@ -12,6 +12,10 @@ export type RouterEnv = AuthRouterEnv & Pick<Env, 'WEB_ORIGIN'>;
 export function createRouter(env: RouterEnv): Router {
   const router = Router();
 
+  // AB-1016: unauthenticated, unrate-limited health check for Playwright's
+  // webServer readiness probe — must be registered before any auth middleware.
+  router.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
+
   router.use('/auth', createAuthRouter(env));
   router.use('/notes', createNotesRouter(env));
   router.use('/tags', createTagsRouter(env));

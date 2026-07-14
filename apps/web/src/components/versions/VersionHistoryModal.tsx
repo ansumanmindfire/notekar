@@ -25,7 +25,7 @@ export function VersionHistoryModal({
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
 
-  const { data: versions = [], isPending: isListPending } = useVersionsQuery(noteId);
+  const { data: versions = [], isPending: isListPending } = useVersionsQuery(noteId, { enabled: open });
   const selectedDetailQuery = useVersionDetailQuery(noteId, selectedVersionId ?? '', {
     enabled: selectedVersionId !== null,
   });
